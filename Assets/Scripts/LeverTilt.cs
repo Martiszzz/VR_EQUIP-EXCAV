@@ -1,61 +1,57 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 [DefaultExecutionOrder(100)]
 [RequireComponent(typeof(XRBaseInteractable))]
 public class LeverTilt : LeverBase
 {
-    public float maxAngle = 30f;
+    [Range(5f, 45f)] public float maxAngle = 25f;
     public bool returnToCenter = true;
-    public float returnSpeed = 200f;
-    public bool invertForward, invertSide;    
+    [Min(1f)] public float returnSpeed = 75f;
+    [Min(0.02f)] public float responseTime = 0.14f;
+    [Min(1f)] public float followSpeed = 120f;
+    public bool invertForward, invertSide;
+    public Vector3 stemAxis = Vector3.forward;
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
-    float pitch, roll;
-    float grabPitch, grabRoll;
+    float pitch, roll, pitchVelocity, rollVelocity;
+    float grabPitch, grabRoll, startPitch, startRoll;
     bool wasHeld;
-
     void Awake()
     {
         interactable = GetComponent<XRBaseInteractable>();
         restLocalRot = transform.localRotation;
     }
-
     void Update()
     {
         bool held = interactable.isSelected && interactable.interactorsSelecting.Count > 0;
-
+        float targetPitch = pitch, targetRoll = roll;
         if (held)
         {
-            var interactor = interactable.interactorsSelecting[0];
-            Transform hand = interactor.GetAttachTransform(interactable);
-            Quaternion restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
-            Vector3 d = Quaternion.Inverse(restFrame) * (hand.position - transform.position);
-
-            float handPitch = Mathf.Atan2(d.z, d.y) * Mathf.Rad2Deg;
-            float handRoll = Mathf.Atan2(-d.x, d.y) * Mathf.Rad2Deg;
-
+            var hand = interactable.interactorsSelecting[0].GetAttachTransform(interactable);
+            var restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
+            var d = Quaternion.Inverse(restFrame) * (hand.position - transform.position);
+            var handAngles = JoystickMotion.HandAngles(d, stemAxis);
+            float handPitch = handAngles.x;
+            float handRoll = handAngles.y;
             if (!wasHeld)
             {
-                // paėmimo momentu ranka = centras
-                grabPitch = handPitch;
-                grabRoll = handRoll;
+                grabPitch = handPitch; grabRoll = handRoll;
+                startPitch = pitch; startRoll = roll;
             }
-
-            pitch = Mathf.Clamp(handPitch - grabPitch, -maxAngle, maxAngle);
-            roll = Mathf.Clamp(handRoll - grabRoll, -maxAngle, maxAngle);
+            var tilt = Vector2.ClampMagnitude(new Vector2(startPitch + Mathf.DeltaAngle(grabPitch, handPitch),
+                startRoll + Mathf.DeltaAngle(grabRoll, handRoll)), maxAngle);
+            targetPitch = tilt.x; targetRoll = tilt.y;
         }
-        else if (returnToCenter)
-        {
-            pitch = Mathf.MoveTowards(pitch, 0, returnSpeed * Time.deltaTime);
-            roll = Mathf.MoveTowards(roll, 0, returnSpeed * Time.deltaTime);
-        }
-
+        else if (returnToCenter) { targetPitch = targetRoll = 0; }
+        float rate = held ? followSpeed : returnSpeed;
+        pitch = Mathf.SmoothDamp(pitch, targetPitch, ref pitchVelocity, responseTime, rate);
+        roll = Mathf.SmoothDamp(roll, targetRoll, ref rollVelocity, responseTime, rate);
+        var limited = Vector2.ClampMagnitude(new Vector2(pitch, roll), maxAngle);
+        pitch = limited.x; roll = limited.y;
         wasHeld = held;
-
-        transform.localRotation = restLocalRot * Quaternion.Euler(pitch, 0, roll);
-
-        Forward = (invertForward ? -1 : 1) * pitch / maxAngle;
-        Side = (invertSide ? -1 : 1) * roll / maxAngle;
+        transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
+        Forward = (invertForward ? -1 : 1) * pitch / Mathf.Max(1f, maxAngle);
+        Side = (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
     }
 }

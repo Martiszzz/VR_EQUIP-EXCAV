@@ -1,72 +1,81 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 
 public class FingerStick : LeverBase
 {
-    public Transform head;                 // tuščias objektas lazdelės viršuje
-    public float touchRadius = 0.03f;      // metrais (pasaulio erdvėje)
-    public float maxAngle = 25f;
-    public float followSpeed = 300f;       // laipsniai per sekundę
-    public float returnSpeed = 150f;
+    public Transform head;
+    public float touchRadius = 0.03f;
+    [Range(5f, 45f)] public float maxAngle = 25f;
+    public float followSpeed = 100f;
+    public float returnSpeed = 65f;
+    [Min(0.02f)] public float responseTime = 0.16f;
     public bool invertForward, invertSide;
-    public Transform[] extraTips;          // jei pirštų galiukų automatiškai neranda
-
+    public Vector3 stemAxis = Vector3.up;
+    public Transform[] extraTips;
     Quaternion restLocalRot;
-    float pitch, roll;
+    float pitch, roll, pitchVelocity, rollVelocity;
+    float grabPitch, grabRoll, startPitch, startRoll, lastTouch;
+    bool touching;
     XRPokeInteractor[] pokes;
-
     void Awake()
     {
         restLocalRot = transform.localRotation;
-        pokes = FindObjectsByType<XRPokeInteractor>();
+        pokes = FindObjectsByType<XRPokeInteractor>(FindObjectsSortMode.None);
     }
-
     bool FindTip(out Vector3 tip)
     {
         tip = default;
-        float best = touchRadius;
+        float best = touchRadius * (touching ? 1.6f : 1f);
         bool found = false;
-
         foreach (var p in pokes)
         {
-            if (!p) continue;
-            Vector3 pos = p.attachTransform ? p.attachTransform.position : p.transform.position;
-            float dist = Vector3.Distance(pos, head.position);
-            if (dist < best) { best = dist; tip = pos; found = true; }
+            if (!p || !p.isActiveAndEnabled) continue;
+            var pos = p.attachTransform ? p.attachTransform.position : p.transform.position;
+            float distance = Vector3.Distance(pos, head.position);
+            if (distance < best) { best = distance; tip = pos; found = true; }
         }
-        foreach (var t in extraTips)
+        if (extraTips != null) foreach (var t in extraTips)
         {
-            if (!t) continue;
-            float dist = Vector3.Distance(t.position, head.position);
-            if (dist < best) { best = dist; tip = t.position; found = true; }
+            if (!t || !t.gameObject.activeInHierarchy) continue;
+            float distance = Vector3.Distance(t.position, head.position);
+            if (distance < best) { best = distance; tip = t.position; found = true; }
         }
         return found;
     }
-
     void Update()
     {
         if (!head) return;
-
-        if (FindTip(out Vector3 tip))
+        float targetPitch = pitch, targetRoll = roll;
+        bool held = FindTip(out var tip);
+        if (held)
         {
-            Quaternion restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
-            Vector3 d = Quaternion.Inverse(restFrame) * (tip - transform.position);
-
-            float targetPitch = Mathf.Clamp(Mathf.Atan2(d.z, d.y) * Mathf.Rad2Deg, -maxAngle, maxAngle);
-            float targetRoll = Mathf.Clamp(Mathf.Atan2(-d.x, d.y) * Mathf.Rad2Deg, -maxAngle, maxAngle);
-
-            pitch = Mathf.MoveTowards(pitch, targetPitch, followSpeed * Time.deltaTime);
-            roll = Mathf.MoveTowards(roll, targetRoll, followSpeed * Time.deltaTime);
+            var restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
+            var d = Quaternion.Inverse(restFrame) * (tip - transform.position);
+            var handAngles = JoystickMotion.HandAngles(d, stemAxis);
+            float handPitch = handAngles.x;
+            float handRoll = handAngles.y;
+            if (!touching)
+            {
+                grabPitch = handPitch; grabRoll = handRoll;
+                startPitch = pitch; startRoll = roll;
+            }
+            touching = true;
+            lastTouch = Time.time;
+            var tilt = Vector2.ClampMagnitude(new Vector2(startPitch + Mathf.DeltaAngle(grabPitch, handPitch),
+                startRoll + Mathf.DeltaAngle(grabRoll, handRoll)), maxAngle);
+            targetPitch = tilt.x; targetRoll = tilt.y;
         }
-        else
+        else if (Time.time - lastTouch > 0.1f)
         {
-            pitch = Mathf.MoveTowards(pitch, 0, returnSpeed * Time.deltaTime);
-            roll = Mathf.MoveTowards(roll, 0, returnSpeed * Time.deltaTime);
+            touching = false;
+            targetPitch = targetRoll = 0;
         }
-
-        transform.localRotation = restLocalRot * Quaternion.Euler(pitch, 0, roll);
-
-        Forward = (invertForward ? -1 : 1) * pitch / maxAngle;
-        Side = (invertSide ? -1 : 1) * roll / maxAngle;
+        pitch = Mathf.SmoothDamp(pitch, targetPitch, ref pitchVelocity, responseTime, held ? followSpeed : returnSpeed);
+        roll = Mathf.SmoothDamp(roll, targetRoll, ref rollVelocity, responseTime, held ? followSpeed : returnSpeed);
+        var limited = Vector2.ClampMagnitude(new Vector2(pitch, roll), maxAngle);
+        pitch = limited.x; roll = limited.y;
+        transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
+        Forward = (invertForward ? -1 : 1) * pitch / Mathf.Max(1f, maxAngle);
+        Side = (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
     }
 }
