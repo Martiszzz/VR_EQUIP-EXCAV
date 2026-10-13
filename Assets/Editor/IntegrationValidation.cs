@@ -25,6 +25,7 @@ public static class IntegrationValidation
             foreach (var tracks in UnityEngine.Object.FindObjectsByType<TrackDrive>(FindObjectsSortMode.None))
                 Require(tracks.leftLever && tracks.rightLever && tracks.excavator, "TrackDrive references missing.");
             CheckTerrain(dig);
+            CheckFracture(dig);
             CheckBucket(dig);
             CheckControls();
             CheckJoystickTilt();
@@ -123,7 +124,8 @@ public static class IntegrationValidation
             foreach (var block in blocks)
             {
                 Require(!block.IsHeld && !block.rb.isKinematic && block.GetComponent<Collider>().enabled, "Dump did not restore physical soil.");
-                Require(!block.GetComponent<Renderer>().enabled, "Pouring sand still shows large cubes.");
+                Require(block.GetComponent<Renderer>().enabled && block.GetComponent<MeshFilter>().sharedMesh.name.StartsWith("Earth clod"),
+                    "Earth clod changes into invisible sand immediately after leaving the bucket.");
             }
             Require(bucket.Sand && bucket.Sand.Particles && bucket.Sand.PendingGrains > 0, "Sand stream is missing.");
             bucket.Sand.Step(0.05f);
@@ -219,6 +221,39 @@ public static class IntegrationValidation
         var right = JoystickMotion.HandAngles(new Vector3(0.1f, 0, 1), Vector3.forward);
         Require(right.y > 0 && Mathf.Abs(right.x) < 0.001f, "Z-axis joystick side input is incorrect.");
         Debug.Log("JOYSTICK PASS: native axes, centered input, no axial twist, bounded diagonal tilt.");
+    }
+    static void CheckFracture(DigSystem dig)
+    {
+        Vector3 position = dig.terrain.transform.position + dig.terrain.terrainData.size * 0.5f + Vector3.up * 3;
+        var parent = dig.Spawn(position);
+        float before = parent.Volume;
+        parent.Hold(dig.bucket);
+        Require(!parent.TryBreak(Vector3.up, 4), "Held clod fractures inside bucket.");
+        parent.DropAsSoil(position, Vector3.zero);
+        Require(!parent.TryBreak(Vector3.up, 0.5f), "Gentle contact shatters soil.");
+        Require(parent.TryBreak(Vector3.up, 3f), "Hard impact did not split soil.");
+        var fragments = dig.GetComponentsInChildren<DirtBlock>();
+        Require(fragments.Length == 3, "Clod does not split into three fragments.");
+        float total = 0;
+        foreach (var fragment in fragments)
+        {
+            total += fragment.Volume;
+            Require(fragment.FractureLevel == 1 && fragment.GetComponent<Renderer>().enabled, "Fragment depth/appearance is wrong.");
+            Require(!fragment.TryBreak(Vector3.up, 10), "Fragments recursively multiply without a limit.");
+            Require(fragment.transform.lossyScale.x < dig.blockSize, "Fragment has not become smaller.");
+        }
+        Require(Mathf.Abs(total - before) < before * 0.0001f, "Impact fracture creates or destroys soil volume.");
+        foreach (var fragment in fragments) dig.Release(fragment);
+        int limit = dig.maxBlocks;
+        try
+        {
+            dig.maxBlocks = 1;
+            parent = dig.Spawn(position);
+            Require(!parent.TryBreak(Vector3.up, 5) && parent.Volume == before, "Pool exhaustion deletes or duplicates soil.");
+            dig.Release(parent);
+        }
+        finally { dig.maxBlocks = limit; }
+        Debug.Log("SOIL FRACTURE PASS: hard impacts, visible smaller clods, conserved volume and bounded fragment count.");
     }
     static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

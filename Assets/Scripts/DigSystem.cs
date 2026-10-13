@@ -145,15 +145,16 @@ public class DigSystem : MonoBehaviour
         td.SetHeights(x0, z0, heights);
         return Mathf.Min(volume, accepted * td.size.y * CellArea);
     }
-    public DirtBlock Spawn(Vector3 pos)
+    public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0)
     {
-        if (!CanSpawn) return null;
+        float amount = volume ?? BlockVolume;
+        if (!CanSpawn || amount <= 0 || float.IsNaN(amount) || float.IsInfinity(amount)) return null;
         var block = pool.Count > 0 ? pool.Dequeue() : Instantiate(blockPrefab, transform);
         block.transform.SetParent(null, false);
-        block.transform.localScale = Vector3.one * blockSize;
+        block.transform.localScale = Vector3.one * Mathf.Pow(amount, 1f / 3f);
         block.transform.SetParent(transform, true);
         active.Add(block);
-        block.Activate(pos, this, BlockVolume);
+        block.Activate(pos, this, amount, fractureLevel);
         return block;
     }
     public void Release(DirtBlock block)

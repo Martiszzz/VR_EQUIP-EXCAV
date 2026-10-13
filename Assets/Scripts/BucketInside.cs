@@ -11,6 +11,7 @@ public class BucketInside : MonoBehaviour
     public Vector3 lipAxis = Vector3.up;
     [Range(30f, 150f)] public float dumpAngle = 60f;
     [Min(1f)] public float dumpRate = 16f;
+    [Range(0f, 0.4f)] public float finesFraction = 0.12f;
     [Min(0f)] public float wallPadding = 0.015f;
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
@@ -127,8 +128,9 @@ public class BucketInside : MonoBehaviour
             var block = captured[captured.Count - 1];
             captured.RemoveAt(captured.Count - 1);
             Vector3 launch = velocity + transform.TransformDirection(lipAxis.normalized) * Mathf.Lerp(0.15f, 0.45f, flow);
-            block.DropAsSand(PourPosition(Random.Range(-0.5f, 0.5f)), launch);
-            sand.AddVolume(block.Volume);
+            // Release the clod where it rests, so it slides over the lip instead of teleporting there.
+            block.DropAsSoil(block.transform.position, launch);
+            sand.AddVolume(block.Volume * finesFraction);
             dumpCarry -= 1f;
         }
         if (captured.Count == 0) dumpCarry = 0;

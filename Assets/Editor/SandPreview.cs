@@ -44,15 +44,20 @@ public static class SandPreview
         rig.position += Vector3.up * 1.7f;
         rig.localRotation *= Quaternion.Euler(-80, 0, 0);
         Physics.SyncTransforms();
+        var previousSimulationMode = Physics.simulationMode;
+        Physics.simulationMode = SimulationMode.Script;
         for (int i = 0; i < 65; i++)
         {
             bucket.Step(0.02f);
             bucket.Sand.Step(0.02f);
             bucket.Sand.Particles.Simulate(0.02f, false, false, true);
+            Physics.SyncTransforms();
+            Physics.Simulate(0.02f);
         }
+        Physics.simulationMode = previousSimulationMode;
         Vector3 outlet = bucket.PourPosition(0);
         Vector3 target = outlet + Vector3.down * 0.45f;
-        Capture(target + new Vector3(1.35f, 0.3f, 1.4f), target, 42, "C:/Temp/VR-sand-preview.png");
+        Capture(target + new Vector3(1.35f, 0.3f, 1.4f), target, 42, "C:/Temp/VR-soil-pouring-preview.png");
         Debug.Log("SAND PREVIEW: " + bucket.Sand.Particles.particleCount + " grains");
         EditorApplication.Exit(0);
     }

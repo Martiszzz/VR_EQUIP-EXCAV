@@ -35,7 +35,7 @@ public class SandFlow : MonoBehaviour
         main.startSize = new ParticleSystem.MinMaxCurve(grainSize * 0.55f, grainSize * 1.4f);
         main.startSpeed = 0;
         main.gravityModifier = 1f;
-        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.48f, 0.31f, 0.15f), new Color(0.76f, 0.58f, 0.33f));
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.28f, 0.17f, 0.08f), new Color(0.48f, 0.31f, 0.16f));
         main.startRotation3D = true;
         main.startRotationX = new ParticleSystem.MinMaxCurve(0, Mathf.PI * 2f);
         main.startRotationY = new ParticleSystem.MinMaxCurve(0, Mathf.PI * 2f);
@@ -70,8 +70,8 @@ public class SandFlow : MonoBehaviour
         if (!shader) shader = Shader.Find("Universal Render Pipeline/Lit");
         if (!shader) shader = Shader.Find("Standard");
         material = new Material(shader) { name = "Sand grains (runtime)" };
-        material.SetColor("_BaseColor", new Color(0.68f, 0.49f, 0.26f));
-        material.SetColor("_Color", new Color(0.68f, 0.49f, 0.26f));
+        material.SetColor("_BaseColor", new Color(0.50f, 0.34f, 0.18f));
+        material.SetColor("_Color", new Color(0.50f, 0.34f, 0.18f));
         material.SetFloat("_Smoothness", 0.05f);
         var renderer = go.GetComponent<ParticleSystemRenderer>();
         renderer.renderMode = ParticleSystemRenderMode.Mesh;
@@ -94,7 +94,7 @@ public class SandFlow : MonoBehaviour
         if (!bucket || !grains || dt <= 0) return;
         velocity = Vector3.ClampMagnitude((bucket.transform.position - lastPosition) / dt, 5f);
         lastPosition = bucket.transform.position;
-        float rate = Mathf.Max(120f, bucket.dumpRate * bucket.PourStrength * grainsPerChunk);
+        float rate = Mathf.Max(40f, bucket.dumpRate * bucket.PourStrength * grainsPerChunk * bucket.finesFraction);
         fractional += Mathf.Min(pending, rate * dt);
         int count = Mathf.Min(Mathf.FloorToInt(fractional), Mathf.FloorToInt(pending));
         fractional -= count;
@@ -111,6 +111,23 @@ public class SandFlow : MonoBehaviour
             grains.Emit(emit, 1);
         }
         if (pending < 1f) { pending = 0; fractional = 0; }
+    }
+    public void EmitImpact(Vector3 position, Vector3 normal, int count)
+    {
+        if (!grains) return;
+        count = Mathf.Min(count, Mathf.Max(0, particleBudget - grains.particleCount));
+        for (int i = 0; i < count; i++)
+        {
+            var emit = new ParticleSystem.EmitParams
+            {
+                position = position + Random.insideUnitSphere * 0.01f,
+                velocity = normal * Random.Range(0.08f, 0.25f) + Vector3.ProjectOnPlane(Random.insideUnitSphere, normal) * 0.25f,
+                startSize = grainSize * Random.Range(0.4f, 0.8f),
+                startLifetime = Random.Range(0.5f, 1.1f),
+                applyShapeToPosition = false
+            };
+            grains.Emit(emit, 1);
+        }
     }
 
     void OnDestroy()
