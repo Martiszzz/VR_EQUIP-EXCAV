@@ -12,6 +12,7 @@ public class DirtBlock : MonoBehaviour
     Collider[] colliders;
     Renderer[] renderers;
     BoxCollider grainCollider;
+    SphereCollider soilCollider;
     Vector3 originalColliderSize;
     float calm, age;
 
@@ -21,13 +22,15 @@ public class DirtBlock : MonoBehaviour
         Volume = volume;
         FractureLevel = fractureLevel;
         if (!rb) rb = GetComponent<Rigidbody>();
-        colliders = GetComponentsInChildren<Collider>();
         if (renderers == null)
         {
             renderers = GetComponentsInChildren<Renderer>();
             grainCollider = GetComponent<BoxCollider>();
             if (grainCollider) originalColliderSize = grainCollider.size;
+            soilCollider = gameObject.AddComponent<SphereCollider>();
+            soilCollider.radius = 0.48f;
         }
+        colliders = GetComponentsInChildren<Collider>();
         foreach (var renderer in renderers) renderer.enabled = true;
         SoilClodVisual.Apply(gameObject);
         if (grainCollider) grainCollider.size = originalColliderSize;
@@ -56,6 +59,7 @@ public class DirtBlock : MonoBehaviour
         transform.SetParent(container.transform, true);
         transform.rotation = container.transform.rotation;
         IsHeld = true;
+        SetVisible(false);
     }
     public void Drop(Vector3 velocity)
     {
@@ -64,6 +68,7 @@ public class DirtBlock : MonoBehaviour
         rb.isKinematic = false;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         SetColliders(true);
+        SetVisible(true);
         rb.linearVelocity = Vector3.ClampMagnitude(velocity, 5f);
         rb.WakeUp();
         calm = age = 0;
@@ -121,7 +126,12 @@ public class DirtBlock : MonoBehaviour
         transform.SetParent(owner.transform, true);
         gameObject.SetActive(false);
     }
-    void SetColliders(bool value) { foreach (var c in colliders) c.enabled = value; }
+    void SetVisible(bool value) { foreach (var renderer in renderers) renderer.enabled = value; }
+    void SetColliders(bool value)
+    {
+        foreach (var c in colliders) c.enabled = value;
+        if (grainCollider) grainCollider.enabled = false;
+    }
     void FixedUpdate()
     {
         if (!owner || IsHeld) return;

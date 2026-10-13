@@ -6,6 +6,10 @@ public static class SoilClodVisual
 {
     static Mesh[] meshes;
     static Material[] materials;
+    public static Material EarthMaterial
+    {
+        get { if (meshes == null || !meshes[0]) Build(); return materials[2]; }
+    }
     public static void Apply(GameObject chunk)
     {
         if (meshes == null || !meshes[0]) Build();

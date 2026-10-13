@@ -7,6 +7,16 @@ public static class SandPreview
 {
     public static void RenderLoaded()
     {
+        Loaded();
+        EditorApplication.Exit(0);
+    }
+    public static void RenderBoth()
+    {
+        Loaded();
+        Render();
+    }
+    static void Loaded()
+    {
         EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
         var dig = Object.FindAnyObjectByType<DigSystem>();
         var bucket = dig.bucket;
@@ -15,7 +25,7 @@ public static class SandPreview
             if (!bucket.TryGetSpawnPosition(dig.blockSize, out var p)) break;
             bucket.Capture(dig.Spawn(p));
         }
-        bucket.transform.parent.position += Vector3.up * 0.8f;
+        bucket.transform.root.position += Vector3.up * 0.8f;
         var earth = Object.FindAnyObjectByType<DirtBlock>();
         var material = earth.GetComponent<Renderer>().sharedMaterial;
         Debug.Log($"EARTH MATERIAL: {material.name}, shader={material.shader.name}, color={material.GetColor("_BaseColor")}");
@@ -28,7 +38,6 @@ public static class SandPreview
         var position = center + bucket.transform.TransformDirection(bucket.openingAxis) * 0.6f +
             bucket.transform.TransformDirection(bucket.lipAxis) * 0.75f + bucket.transform.right * 0.4f;
         Capture(position, center, 36, "C:/Temp/VR-earth-clods-preview.png");
-        EditorApplication.Exit(0);
     }
     public static void Render()
     {
@@ -46,10 +55,9 @@ public static class SandPreview
         Physics.SyncTransforms();
         var previousSimulationMode = Physics.simulationMode;
         Physics.simulationMode = SimulationMode.Script;
-        for (int i = 0; i < 65; i++)
+        for (int i = 0; i < 20; i++)
         {
             bucket.Step(0.02f);
-            bucket.Sand.Step(0.02f);
             bucket.Sand.Particles.Simulate(0.02f, false, false, true);
             Physics.SyncTransforms();
             Physics.Simulate(0.02f);

@@ -7,20 +7,18 @@ public class SandFlow : MonoBehaviour
     [Range(8, 120)] public int grainsPerChunk = 80;
     [Min(0.001f)] public float grainSize = 0.006f;
     [Range(200, 3000)] public int particleBudget = 2400;
-    BucketInside bucket;
     ParticleSystem grains;
     Material material;
     Mesh mesh;
-    float pending, fractional;
-    Vector3 lastPosition, velocity;
+
+
     public ParticleSystem Particles => grains;
-    public float PendingGrains => pending;
+
 
     public void Initialize(BucketInside container)
     {
         if (grains) return;
-        bucket = container;
-        lastPosition = bucket.transform.position;
+
         var go = new GameObject("Pouring sand");
         go.transform.SetParent(transform, false);
         grains = go.AddComponent<ParticleSystem>();
@@ -82,35 +80,21 @@ public class SandFlow : MonoBehaviour
         grains.Play();
     }
 
-    public void AddVolume(float volume)
+    public void EmitLoose(Vector3 position, Vector3 velocity, float volume)
     {
+        if (!grains || volume <= 0) return;
         float unit = DigSystem.I ? DigSystem.I.BlockVolume : 0.06f * 0.06f * 0.06f;
-        pending = Mathf.Min(particleBudget, pending + volume / unit * grainsPerChunk);
-    }
-
-    void Update() { Step(Time.deltaTime); }
-    public void Step(float dt)
-    {
-        if (!bucket || !grains || dt <= 0) return;
-        velocity = Vector3.ClampMagnitude((bucket.transform.position - lastPosition) / dt, 5f);
-        lastPosition = bucket.transform.position;
-        float rate = Mathf.Max(40f, bucket.dumpRate * bucket.PourStrength * grainsPerChunk * bucket.finesFraction);
-        fractional += Mathf.Min(pending, rate * dt);
-        int count = Mathf.Min(Mathf.FloorToInt(fractional), Mathf.FloorToInt(pending));
-        fractional -= count;
-        pending -= count;
+        int count = Mathf.Min(Mathf.RoundToInt(volume / unit * grainsPerChunk), particleBudget - grains.particleCount);
         for (int i = 0; i < count; i++)
         {
             var emit = new ParticleSystem.EmitParams
             {
-                position = bucket.PourPosition((Random.value + Random.value - 1f) * 0.4f) + Random.insideUnitSphere * 0.007f,
-                velocity = velocity + bucket.transform.TransformDirection(bucket.lipAxis.normalized) *
-                    Random.Range(0.15f, 0.5f) + Random.insideUnitSphere * 0.13f,
+                position = position + Random.insideUnitSphere * 0.012f,
+                velocity = velocity + Random.insideUnitSphere * 0.12f,
                 applyShapeToPosition = false
             };
             grains.Emit(emit, 1);
         }
-        if (pending < 1f) { pending = 0; fractional = 0; }
     }
     public void EmitImpact(Vector3 position, Vector3 normal, int count)
     {

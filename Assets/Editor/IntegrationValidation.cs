@@ -29,6 +29,17 @@ public static class IntegrationValidation
             CheckBucket(dig);
             CheckControls();
             CheckJoystickTilt();
+            var randomState = UnityEngine.Random.state;
+            try
+            {
+                foreach (int seed in new[] {17, 329, 4096})
+                {
+                    EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+                    UnityEngine.Random.InitState(seed);
+                    CheckBucket(UnityEngine.Object.FindAnyObjectByType<DigSystem>());
+                }
+            }
+            finally { UnityEngine.Random.state = randomState; }
             Debug.Log("INTEGRATION PASS: scene, volume-limited digging, refill, terrain edges, bucket packing/dumping/pooling, smooth movement and joint limits.");
             EditorApplication.Exit(0);
         }
@@ -89,7 +100,7 @@ public static class IntegrationValidation
             {
                 Require(bucket.TryGetSpawnPosition(dig.blockSize, out var position), "Missing soil slot.");
                 foreach (var other in blocks)
-                    Require(Vector3.Distance(other.transform.position, position) >= dig.blockSize, "Soil chunks overlap.");
+                    Require(Vector3.Distance(other.transform.position, position) >= dig.blockSize * 0.97f, "Soil physics bodies overlap.");
                 Vector3 local = collider.transform.InverseTransformPoint(position) - collider.center;
                 Vector3 scale = collider.transform.lossyScale;
                 Vector3 margin = new Vector3(dig.blockSize / scale.x, dig.blockSize / scale.y, dig.blockSize / scale.z) * 0.5f;
@@ -101,6 +112,7 @@ public static class IntegrationValidation
                 bucket.Capture(block);
                 blocks.Add(block);
                 Require(block.IsHeld && block.rb.isKinematic && bucket.Contains(block), "Soil not retained in bucket.");
+                Require(!block.GetComponent<Renderer>().enabled, "Individual chunk rows are still visible inside the bucket.");
                 var mesh = block.GetComponent<MeshFilter>().sharedMesh;
                 Require(mesh && mesh.name.StartsWith("Earth clod") && mesh.triangles.Length > 36,
                     "Captured earth still uses the cube mesh.");
@@ -108,27 +120,31 @@ public static class IntegrationValidation
                     "Earth clod protrudes outside its reserved slot.");
             }
             Require(bucket.FreeSlots(dig.blockSize) == 0 && !bucket.TryGetSpawnPosition(dig.blockSize, out _), "Full bucket permits more soil.");
+            Require(bucket.Fill && bucket.Fill.IsVisible && bucket.Fill.Amount > 0.99f && bucket.Fill.SurfaceMesh.vertexCount > 100,
+                "Bucket does not show its connected soil fill.");
+            var distinctX = new HashSet<int>();
+            foreach (var block in blocks) distinctX.Add(Mathf.RoundToInt(block.transform.localPosition.x * 1000));
+            Require(distinctX.Count > 15, "Stored chunks still form regular columns.");
             var before = blocks[0].transform.position;
             rig.position += Vector3.right;
             Require(Vector3.Distance(blocks[0].transform.position, before + Vector3.right) < 0.0001f, "Soil does not follow moving bucket.");
             rig.position = originalPosition + Vector3.up * 2f;
             rig.rotation = originalRotation * Quaternion.Euler(85, 0, 0);
             Require(!bucket.IsDumping, "Bucket dumps into its back wall.");
-            rig.rotation = originalRotation * Quaternion.Euler(-65, 0, 0);
+            rig.rotation = originalRotation * Quaternion.Euler(-bucket.dumpAngle - 2f, 0, 0);
             Require(bucket.IsDumping, "Tipped bucket does not dump.");
             float shallowFlow = bucket.PourStrength;
             rig.rotation = originalRotation * Quaternion.Euler(-80, 0, 0);
             Require(bucket.PourStrength > shallowFlow, "Tipping further does not increase sand flow.");
-            int pourSteps = Mathf.CeilToInt(slots / (bucket.dumpRate * bucket.PourStrength * Time.fixedDeltaTime)) + 5;
-            for (int i = 0; i < pourSteps; i++) bucket.Step(Time.fixedDeltaTime);
+            bucket.Step(Time.fixedDeltaTime);
+            Require(bucket.CapturedCount == 0 && !bucket.Fill.IsVisible, "Load still releases one chunk at a time.");
             foreach (var block in blocks)
             {
-                Require(!block.IsHeld && !block.rb.isKinematic && block.GetComponent<Collider>().enabled, "Dump did not restore physical soil.");
+                Require(!block.IsHeld && !block.rb.isKinematic && block.GetComponent<SphereCollider>().enabled, "Dump did not restore physical soil.");
                 Require(block.GetComponent<Renderer>().enabled && block.GetComponent<MeshFilter>().sharedMesh.name.StartsWith("Earth clod"),
                     "Earth clod changes into invisible sand immediately after leaving the bucket.");
             }
-            Require(bucket.Sand && bucket.Sand.Particles && bucket.Sand.PendingGrains > 0, "Sand stream is missing.");
-            bucket.Sand.Step(0.05f);
+            Require(bucket.Sand && bucket.Sand.Particles, "Loose soil particles are missing.");
             var particles = bucket.Sand.Particles;
             Require(particles.particleCount > 0 && particles.particleCount <= particles.main.maxParticles, "Sand emission budget failed.");
             Require(particles.main.simulationSpace == ParticleSystemSimulationSpace.World && particles.collision.enabled,
@@ -170,7 +186,7 @@ public static class IntegrationValidation
             rig.SetPositionAndRotation(originalPosition, originalRotation);
             foreach (var block in blocks) if (block) UnityEngine.Object.DestroyImmediate(block.gameObject);
         }
-        Debug.Log("BUCKET PASS: " + slots + " slots, gradual sand flow, grain gravity, collisions and pool reuse.");
+        Debug.Log("BUCKET PASS: " + slots + " randomly packed bodies, connected mound, collective avalanche, collisions and pool reuse.");
     }
 
     static void CheckControls()
