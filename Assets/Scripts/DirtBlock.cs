@@ -8,7 +8,7 @@ public class DirtBlock : MonoBehaviour
     public int FractureLevel { get; private set; }
     [Min(0.5f)] public float breakSpeed = 1.6f;
     [Min(0.04f)] public float depositRadius = 0.12f;
-    [Min(0.1f)] public float settleTime = 0.6f;
+    [Min(0.1f)] public float settleTime = 0.1f;
     DigSystem owner;
     BucketInside bucket;
     Collider[] colliders;
@@ -74,6 +74,7 @@ public class DirtBlock : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         SetColliders(true);
         SetVisible(true);
+        owner.IgnoreSoilCollisions(this);
         rb.linearVelocity = Vector3.ClampMagnitude(velocity, 5f);
         rb.WakeUp();
         calm = age = 0;
@@ -81,18 +82,41 @@ public class DirtBlock : MonoBehaviour
     }
     public void DropAsSoil(Vector3 position, Vector3 velocity)
     {
+        // Loose earth slides out; a fast bucket turn must not launch it sideways.
+        var horizontal = Vector3.ClampMagnitude(Vector3.ProjectOnPlane(velocity, Vector3.up), 0.25f);
+        velocity = horizontal + Vector3.up * Mathf.Clamp(velocity.y, -1f, 0.15f);
         Drop(velocity);
         rb.position = position;
         transform.position = position;
-        rb.angularVelocity = Random.insideUnitSphere * 2.5f;
+        rb.angularVelocity = Random.insideUnitSphere * 0.3f;
         // Retain the same visible clod and collision size after leaving the bucket.
     }
     void OnCollisionEnter(Collision collision)
     {
-        if (age < 0.1f || IsHeld || collision.contactCount == 0) return;
+        if (IsHeld || !gameObject.activeSelf || collision.contactCount == 0) return;
+        if (owner && collision.collider == owner.terrain.GetComponent<TerrainCollider>())
+        {
+            Deposit(collision.GetContact(0).point);
+            return;
+        }
+        if (age < 0.1f) return;
         if (collision.collider.GetComponentInParent<DirtBlock>()) return;
         if (bucket && collision.transform.IsChildOf(bucket.transform.parent)) return;
         TryBreak(collision.GetContact(0).normal, collision.relativeVelocity.magnitude);
+    }
+    public void IgnoreSoilCollision(DirtBlock other)
+    {
+        // Clods represent parcels of a continuous soil stream, not bouncing stones.
+        if (other && other != this && soilCollider && other.soilCollider)
+            Physics.IgnoreCollision(soilCollider, other.soilCollider);
+    }
+    void Deposit(Vector3 point)
+    {
+        if (!owner || IsHeld || !gameObject.activeSelf || !owner.ContainsTerrainPoint(point) ||
+            (owner.bucket && owner.bucket.Contains(this))) return;
+        float radius = Mathf.Max(depositRadius, Mathf.Pow(Volume, 1f / 3f) * 1.5f);
+        Volume -= owner.Add(point, radius, Volume, true);
+        if (Volume <= owner.BlockVolume * 0.001f) owner.Release(this);
     }
     public bool TryBreak(Vector3 normal, float impactSpeed)
     {
@@ -158,6 +182,13 @@ public class DirtBlock : MonoBehaviour
         bool inBucket = owner.bucket && owner.bucket.Contains(this);
         if (!owner.ContainsTerrainPoint(transform.position)) return;
         float surface = owner.SurfaceY(transform.position);
+        float grainRadius = soilCollider.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
+        // Heightmap support also covers newly deposited soil before the collider's next sync.
+        if (!inBucket && age >= 0.04f && rb.position.y - grainRadius <= surface + 0.01f)
+        {
+            Deposit(rb.position);
+            return;
+        }
         if (rb.linearVelocity.sqrMagnitude < 0.04f)
         {
             supportClock -= dt;
@@ -168,10 +199,7 @@ public class DirtBlock : MonoBehaviour
         bool fellThrough = transform.position.y < surface - 0.3f;
         if (!inBucket && age > 0.3f && (calm > settleTime || fellThrough))
         {
-            float radius = Mathf.Max(depositRadius, Mathf.Pow(Volume, 1f / 3f) * 1.5f);
-            float added = owner.Add(rb.position, radius, Volume, true);
-            Volume -= added;
-            if (Volume <= owner.BlockVolume * 0.001f) owner.Release(this);
+            Deposit(rb.position);
         }
     }
 }

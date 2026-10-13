@@ -10,10 +10,10 @@ public class BucketInside : MonoBehaviour
     [Range(30f, 150f)] public float dumpAngle = 42f;
     [Range(0f, 0.4f)] public float finesFraction = 0.12f;
     [Min(0f)] public float wallPadding = 0.015f;
-    [Min(2f)] public float maxPourRate = 30f;
-    [Min(1f)] public float flowAcceleration = 45f;
-    [Range(0.06f, 0.2f)] public float batchInterval = 0.1f;
-    [Range(2, 8)] public int maxBatchSize = 5;
+    [Min(2f)] public float maxPourRate = 70f;
+    [Min(1f)] public float flowAcceleration = 200f;
+    [Range(0.06f, 0.2f)] public float batchInterval = 0.08f;
+    [Range(2, 8)] public int maxBatchSize = 6;
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
     Vector3 lastPosition, velocity;
@@ -154,7 +154,7 @@ public class BucketInside : MonoBehaviour
         if (!sand) { sand = gameObject.AddComponent<SandFlow>(); sand.Initialize(this); }
         float strength = PourStrength;
         // Soil accelerates into a bounded, irregular stream; sudden tipping cannot empty the load in one frame.
-        float desired = maxPourRate * strength * Mathf.Sqrt(FillFraction);
+        float desired = maxPourRate * strength * Mathf.Lerp(0.75f, 1f, FillFraction);
         flowRate = Mathf.MoveTowards(flowRate, desired, flowAcceleration * dt);
         releaseCredit += flowRate * dt;
         flowClock += dt;

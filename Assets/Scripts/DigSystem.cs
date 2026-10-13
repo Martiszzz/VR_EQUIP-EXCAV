@@ -173,7 +173,12 @@ public class DigSystem : MonoBehaviour
         block.transform.SetParent(transform, true);
         active.Add(block);
         block.Activate(pos, this, amount, fractureLevel);
+        IgnoreSoilCollisions(block);
         return block;
+    }
+    public void IgnoreSoilCollisions(DirtBlock block)
+    {
+        foreach (var other in active) block.IgnoreSoilCollision(other);
     }
     public void Release(DirtBlock block)
     {

@@ -29,7 +29,7 @@ public class SandFlow : MonoBehaviour
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.scalingMode = ParticleSystemScalingMode.Shape;
         main.maxParticles = particleBudget;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(1.7f, 2.4f);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 1.8f);
         main.startSize = new ParticleSystem.MinMaxCurve(grainSize * 0.55f, grainSize * 1.4f);
         main.startSpeed = 0;
         main.gravityModifier = 1f;
@@ -48,7 +48,8 @@ public class SandFlow : MonoBehaviour
         collision.collidesWith = ~0;
         collision.enableDynamicColliders = true;
         collision.maxCollisionShapes = 128;
-        collision.bounce = 0.04f;
+        collision.bounce = 0;
+        collision.lifetimeLoss = 1f;
         collision.dampen = 0.65f;
         collision.radiusScale = 0.5f;
         collision.sendCollisionMessages = false;

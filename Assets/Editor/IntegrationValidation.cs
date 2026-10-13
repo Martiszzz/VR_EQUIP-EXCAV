@@ -150,7 +150,7 @@ public static class IntegrationValidation
             Require(bucket.PourStrength > shallowFlow, "Tipping further does not increase sand flow.");
             bucket.Step(Time.fixedDeltaTime);
             Require(bucket.CapturedCount == slots && bucket.Fill.IsVisible, "Sudden tipping deletes the whole load in one step.");
-            for (int i = 0; i < 60; i++) bucket.Step(0.02f);
+            for (int i = 0; i < 20; i++) bucket.Step(0.02f);
             int partial = bucket.CapturedCount;
             Require(partial > 0 && partial < slots && bucket.Fill.IsVisible && bucket.Fill.Amount > 0.1f && bucket.Fill.Amount < 0.99f,
                 "Fill does not decrease progressively during partial pouring.");
@@ -159,14 +159,18 @@ public static class IntegrationValidation
             Require(bucket.CapturedCount == partial && bucket.Fill.IsVisible, "Leveling the bucket does not stop pouring.");
             rig.rotation = originalRotation * Quaternion.Euler(-80, 0, 0);
             bool groupReleased = false;
+            float pourTime = 0.42f;
             for (int i = 0; i < 1200 && bucket.CapturedCount > 0; i++)
             {
                 int previous = bucket.CapturedCount;
                 bucket.Step(0.02f);
+                pourTime += 0.02f;
                 int released = previous - bucket.CapturedCount;
                 Require(released <= bucket.maxBatchSize, "Pouring exceeds the bounded group size.");
                 groupReleased |= released > 1;
             }
+            Require(pourTime < 1.6f, "Fully tipped bucket pours too slowly: " + pourTime);
+            Debug.Log($"POUR TIME PASS: full load emptied in {pourTime:F2}s of pouring, with bounded groups.");
             for (int i = 0; i < 60; i++) bucket.Step(0.02f);
             Require(groupReleased && bucket.CapturedCount == 0 && !bucket.Fill.IsVisible, "Gradual group pouring never finishes.");
             foreach (var block in blocks)
@@ -317,33 +321,50 @@ public static class IntegrationValidation
             point.y = dig.SurfaceY(point);
             float before = point.y;
             float expectedVolume = 0;
+            int resolution = copy.heightmapResolution;
+            var beforeHeights = copy.GetHeights(0, 0, resolution, resolution);
+            var positions = new List<Vector3>();
             for (int i = 0; i < 12; i++)
             {
                 var pos = point + new Vector3((i%3-1)*0.07f, 1f+(i/6)*0.08f, ((i/3)%2-0.5f)*0.07f);
                 var clod = i < 6 ? dig.Spawn(pos) : dig.Spawn(pos, dig.BlockVolume / 3f, 1);
-                // Exercise settled fragments as well as intact clods, without allowing more fracture in this controlled drop.
-                clod.breakSpeed = 100;
+                clod.DropAsSoil(pos, new Vector3(0.8f, 0, 0.6f));
+                positions.Add(pos);
                 dropped.Add(clod);
                 expectedVolume += clod.Volume;
             }
             Physics.simulationMode = SimulationMode.Script;
             Physics.SyncTransforms();
-            for (int i = 0; i < 500; i++)
+            float landingTime = 0;
+            float maxDrift = 0;
+            for (int i = 0; i < 75; i++)
             {
                 Physics.Simulate(0.02f);
+                landingTime += 0.02f;
+                for (int j = 0; j < dropped.Count; j++)
+                    if (dropped[j].gameObject.activeSelf)
+                        maxDrift = Mathf.Max(maxDrift, Vector3.ProjectOnPlane(dropped[j].rb.position - positions[j], Vector3.up).magnitude);
                 foreach (var clod in dropped) if (clod.gameObject.activeSelf) clod.Step(0.02f);
                 if (i%4 == 0) dig.FlushTerrainChanges();
+                if (dropped.TrueForAll(b => !b.gameObject.activeSelf)) break;
             }
             dig.FlushTerrainChanges();
             Require(dropped.TrueForAll(b => !b.gameObject.activeSelf), "Resting soil never merges into the terrain.");
+            Require(landingTime < 0.8f && maxDrift < 0.15f, $"Soil bounces or scatters before deposition: {landingTime:F2}s, {maxDrift:F3}m.");
+            Require(dig.FreeBlocks == dig.maxBlocks, "Ground contact creates stray fragments.");
             Require(dig.SurfaceY(point) > before + 0.005f, "Dropped soil does not raise the landing area.");
             var remote = point + Vector3.right * 2f;
             Require(Mathf.Abs(dig.SurfaceY(remote) - before) < 0.001f, "Soil raises terrain away from the landing point.");
-            Debug.Log($"DEPOSIT PASS: landing area rose {dig.SurfaceY(point)-before:F4}m from {expectedVolume:F6} cubic meters of soil.");
+            var afterHeights = copy.GetHeights(0, 0, resolution, resolution);
+            double addedVolume = 0;
+            for (int z = 0; z < resolution; z++)
+            for (int x = 0; x < resolution; x++) addedVolume += (afterHeights[z,x] - beforeHeights[z,x]) * copy.size.y * copy.heightmapScale.x * copy.heightmapScale.z;
+            Require(Math.Abs(addedVolume - expectedVolume) < expectedVolume * 0.01f, "Ground absorption does not conserve soil volume.");
+            Debug.Log($"DEPOSIT PASS: landing area rose {dig.SurfaceY(point)-before:F4}m; all soil absorbed in {landingTime:F2}s, drift {maxDrift:F3}m, conserved {addedVolume:F6} cubic meters.");
         }
         finally
         {
-            foreach (var clod in dropped) if (clod) { clod.breakSpeed = 1.6f; dig.Release(clod); }
+            foreach (var clod in dropped) if (clod) dig.Release(clod);
             Physics.simulationMode = mode;
             dig.terrain.terrainData = original;
             collider.terrainData = original;
