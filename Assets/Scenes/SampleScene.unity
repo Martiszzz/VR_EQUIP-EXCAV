@@ -1230,6 +1230,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BucketInside
   spawnPoint: {fileID: 1738130278}
+  pourPoint: {fileID: 151281893}
   capacity: 60
 --- !u!4 &1249843221
 Transform:
@@ -2607,7 +2608,7 @@ MonoBehaviour:
   localAxis: {x: 1, y: 0, z: 0}
   speed: 28
   limit: 1
-  minAngle: -65
+  minAngle: -80
   maxAngle: 85
   deadzone: 0.12
   invert: 0

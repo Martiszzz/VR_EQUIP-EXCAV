@@ -5,6 +5,7 @@ using UnityEngine;
 public class BucketInside : MonoBehaviour
 {
     public Transform spawnPoint;
+    public Transform pourPoint;
     [Min(1)] public int capacity = 60;
     public Vector3 openingAxis = Vector3.forward;
     public Vector3 lipAxis = Vector3.up;
@@ -15,6 +16,18 @@ public class BucketInside : MonoBehaviour
     BoxCollider volume;
     Vector3 lastPosition, velocity;
     float dumpCarry;
+    SandFlow sand;
+    public SandFlow Sand => sand;
+    public float PourStrength
+    {
+        get
+        {
+            if (!IsDumping) return 0;
+            float openingUp = Vector3.Dot(transform.TransformDirection(openingAxis.normalized), Vector3.up);
+            return Mathf.Lerp(0.2f, 1f, Mathf.InverseLerp(Mathf.Cos(dumpAngle * Mathf.Deg2Rad),
+                Mathf.Cos((dumpAngle + 20f) * Mathf.Deg2Rad), openingUp));
+        }
+    }
 
     public bool IsDumping
     {
@@ -83,19 +96,39 @@ public class BucketInside : MonoBehaviour
         block.Hold(this);
     }
     public void Forget(DirtBlock block) { captured.Remove(block); }
-
-    void FixedUpdate()
+    public Vector3 PourPosition(float across)
     {
-        velocity = Vector3.ClampMagnitude((transform.position - lastPosition) / Time.fixedDeltaTime, 5f);
+        if (!volume) volume = GetComponent<BoxCollider>();
+        Vector3 lip = pourPoint ? pourPoint.position : transform.TransformPoint(volume.center +
+            Vector3.Scale(volume.size * 0.5f, lipAxis.normalized));
+        float width = volume.size.x * Mathf.Abs(transform.lossyScale.x);
+        return lip + transform.right * (Mathf.Clamp(across, -0.5f, 0.5f) * width * 0.85f)
+            + transform.TransformDirection(openingAxis.normalized) * 0.015f
+            + transform.TransformDirection(lipAxis.normalized) * 0.025f;
+    }
+
+    void FixedUpdate() { Step(Time.fixedDeltaTime); }
+    public void Step(float deltaTime)
+    {
+        if (deltaTime <= 0) return;
+        velocity = Vector3.ClampMagnitude((transform.position - lastPosition) / deltaTime, 5f);
         lastPosition = transform.position;
         captured.RemoveAll(b => !b || !b.gameObject.activeSelf);
         if (!IsDumping) { dumpCarry = 0; return; }
-        dumpCarry += dumpRate * Time.fixedDeltaTime;
+        if (!sand)
+        {
+            sand = gameObject.AddComponent<SandFlow>();
+            sand.Initialize(this);
+        }
+        float flow = PourStrength;
+        dumpCarry += dumpRate * flow * deltaTime;
         while (dumpCarry >= 1f && captured.Count > 0)
         {
             var block = captured[captured.Count - 1];
             captured.RemoveAt(captured.Count - 1);
-            block.Drop(velocity);
+            Vector3 launch = velocity + transform.TransformDirection(lipAxis.normalized) * Mathf.Lerp(0.15f, 0.45f, flow);
+            block.DropAsSand(PourPosition(Random.Range(-0.5f, 0.5f)), launch);
+            sand.AddVolume(block.Volume);
             dumpCarry -= 1f;
         }
         if (captured.Count == 0) dumpCarry = 0;

@@ -20,7 +20,12 @@ public class PartDriver : MonoBehaviour
     Quaternion restRotation;
     public float Angle => angle;
     public float AngularVelocity => angularVelocity;
-    void Awake() { if (target) restRotation = target.localRotation; }
+    void Awake() { Initialize(); }
+    public void Initialize()
+    {
+        if (target) restRotation = target.localRotation;
+        angle = angularVelocity = 0;
+    }
     void FixedUpdate() { Step(Time.fixedDeltaTime); }
     public void Step(float deltaTime)
     {

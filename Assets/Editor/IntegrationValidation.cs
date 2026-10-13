@@ -75,8 +75,9 @@ public static class IntegrationValidation
     {
         var bucket = dig.bucket;
         var collider = bucket.GetComponent<BoxCollider>();
-        var originalRotation = bucket.transform.rotation;
-        var originalPosition = bucket.transform.position;
+        var rig = bucket.transform.parent;
+        var originalRotation = rig.rotation;
+        var originalPosition = rig.position;
         var blocks = new List<DirtBlock>();
         int slots = bucket.FreeSlots(dig.blockSize);
         Require(slots > 0 && !bucket.IsDumping, "Bucket has no usable slots or is dumping in its initial pose.");
@@ -101,16 +102,43 @@ public static class IntegrationValidation
             }
             Require(bucket.FreeSlots(dig.blockSize) == 0 && !bucket.TryGetSpawnPosition(dig.blockSize, out _), "Full bucket permits more soil.");
             var before = blocks[0].transform.position;
-            bucket.transform.position += Vector3.right;
+            rig.position += Vector3.right;
             Require(Vector3.Distance(blocks[0].transform.position, before + Vector3.right) < 0.0001f, "Soil does not follow moving bucket.");
-            bucket.transform.position = originalPosition + Vector3.up * 2f;
-            bucket.transform.rotation = originalRotation * Quaternion.Euler(85, 0, 0);
+            rig.position = originalPosition + Vector3.up * 2f;
+            rig.rotation = originalRotation * Quaternion.Euler(85, 0, 0);
             Require(!bucket.IsDumping, "Bucket dumps into its back wall.");
-            bucket.transform.rotation = originalRotation * Quaternion.Euler(-65, 0, 0);
+            rig.rotation = originalRotation * Quaternion.Euler(-65, 0, 0);
             Require(bucket.IsDumping, "Tipped bucket does not dump.");
-            for (int i = 0; i < 250; i++) bucket.SendMessage("FixedUpdate");
+            float shallowFlow = bucket.PourStrength;
+            rig.rotation = originalRotation * Quaternion.Euler(-80, 0, 0);
+            Require(bucket.PourStrength > shallowFlow, "Tipping further does not increase sand flow.");
+            int pourSteps = Mathf.CeilToInt(slots / (bucket.dumpRate * bucket.PourStrength * Time.fixedDeltaTime)) + 5;
+            for (int i = 0; i < pourSteps; i++) bucket.Step(Time.fixedDeltaTime);
             foreach (var block in blocks)
+            {
                 Require(!block.IsHeld && !block.rb.isKinematic && block.GetComponent<Collider>().enabled, "Dump did not restore physical soil.");
+                Require(!block.GetComponent<Renderer>().enabled, "Pouring sand still shows large cubes.");
+            }
+            Require(bucket.Sand && bucket.Sand.Particles && bucket.Sand.PendingGrains > 0, "Sand stream is missing.");
+            bucket.Sand.Step(0.05f);
+            var particles = bucket.Sand.Particles;
+            Require(particles.particleCount > 0 && particles.particleCount <= particles.main.maxParticles, "Sand emission budget failed.");
+            Require(particles.main.simulationSpace == ParticleSystemSimulationSpace.World && particles.collision.enabled,
+                "Sand does not use world gravity and surface collisions.");
+            var samples = new ParticleSystem.Particle[particles.main.maxParticles];
+            int sampleCount = particles.GetParticles(samples);
+            Vector3 grainPosition = samples[0].position;
+            rig.position += Vector3.right;
+            particles.GetParticles(samples);
+            Require(samples[0].position == grainPosition, "Falling sand moves with the bucket.");
+            rig.position -= Vector3.right;
+            var collision = particles.collision;
+            collision.enabled = false;
+            float initialYVelocity = samples[0].velocity.y;
+            particles.Simulate(0.1f, false, false, true);
+            particles.GetParticles(samples);
+            Require(samples[0].velocity.y < initialYVelocity - 0.5f, "Sand grains do not accelerate under gravity.");
+            collision.enabled = true;
             var simulationMode = Physics.simulationMode;
             try
             {
@@ -125,14 +153,16 @@ public static class IntegrationValidation
             Require(dig.FreeBlocks == dig.maxBlocks, "Double release corrupted dirt pool capacity.");
             var reused = dig.Spawn(originalPosition);
             Require(blocks.Contains(reused) && reused.Volume == dig.BlockVolume, "Dirt pool failed to reuse/reset a chunk.");
+            Require(reused.GetComponent<Renderer>().enabled && reused.GetComponent<BoxCollider>().size == Vector3.one,
+                "Pooled sand does not restore its captured appearance/collider.");
             dig.Release(reused);
         }
         finally
         {
-            bucket.transform.SetPositionAndRotation(originalPosition, originalRotation);
+            rig.SetPositionAndRotation(originalPosition, originalRotation);
             foreach (var block in blocks) if (block) UnityEngine.Object.DestroyImmediate(block.gameObject);
         }
-        Debug.Log("BUCKET PASS: " + slots + " non-overlapping slots and controlled dumping.");
+        Debug.Log("BUCKET PASS: " + slots + " slots, gradual sand flow, grain gravity, collisions and pool reuse.");
     }
 
     static void CheckControls()
@@ -145,7 +175,7 @@ public static class IntegrationValidation
             try
             {
                 Ignition.EngineRunning = true;
-                driver.SendMessage("Awake");
+                driver.Initialize();
                 driver.lever.Forward = driver.lever.Side = 1;
                 driver.Step(0.02f);
                 Require(Mathf.Abs(driver.AngularVelocity) <= driver.acceleration * 0.02f + 0.001f, "Joint snaps to full speed.");

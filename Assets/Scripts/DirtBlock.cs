@@ -8,6 +8,9 @@ public class DirtBlock : MonoBehaviour
     DigSystem owner;
     BucketInside bucket;
     Collider[] colliders;
+    Renderer[] renderers;
+    BoxCollider grainCollider;
+    Vector3 originalColliderSize;
     float calm, age;
 
     public void Activate(Vector3 pos, DigSystem system, float volume)
@@ -16,6 +19,14 @@ public class DirtBlock : MonoBehaviour
         Volume = volume;
         if (!rb) rb = GetComponent<Rigidbody>();
         colliders = GetComponentsInChildren<Collider>();
+        if (renderers == null)
+        {
+            renderers = GetComponentsInChildren<Renderer>();
+            grainCollider = GetComponent<BoxCollider>();
+            if (grainCollider) originalColliderSize = grainCollider.size;
+        }
+        foreach (var renderer in renderers) renderer.enabled = true;
+        if (grainCollider) grainCollider.size = originalColliderSize;
         transform.SetPositionAndRotation(pos, Quaternion.identity);
         gameObject.SetActive(true);
         rb.isKinematic = false;
@@ -51,6 +62,15 @@ public class DirtBlock : MonoBehaviour
         rb.linearVelocity = Vector3.ClampMagnitude(velocity, 5f);
         rb.WakeUp();
         calm = age = 0;
+    }
+    public void DropAsSand(Vector3 position, Vector3 velocity)
+    {
+        Drop(velocity);
+        // This small body carries the excavated volume; the visible stream is granular.
+        rb.position = position;
+        transform.position = position;
+        foreach (var renderer in renderers) renderer.enabled = false;
+        if (grainCollider) grainCollider.size = originalColliderSize * 0.35f;
     }
     public void PrepareForPool()
     {
