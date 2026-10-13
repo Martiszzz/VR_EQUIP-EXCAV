@@ -12,6 +12,19 @@ public class DigSystem : MonoBehaviour
     readonly Queue<DirtBlock> pool = new Queue<DirtBlock>();
     readonly HashSet<DirtBlock> active = new HashSet<DirtBlock>();
     TerrainData original, runtimeData;
+    bool terrainDirty;
+    float terrainSyncClock;
+    void FixedUpdate()
+    {
+        terrainSyncClock += Time.fixedDeltaTime;
+        if (terrainSyncClock >= 0.08f) { FlushTerrainChanges(); terrainSyncClock = 0; }
+    }
+    public void FlushTerrainChanges()
+    {
+        if (!terrainDirty || !terrain || !terrain.terrainData) return;
+        terrain.terrainData.SyncHeightmap();
+        terrainDirty = false;
+    }
     public float BlockVolume => blockSize * blockSize * blockSize;
     public int FreeBlocks => Mathf.Max(0, maxBlocks - active.Count);
     public bool CanSpawn => FreeBlocks > 0 && blockPrefab;
@@ -112,7 +125,7 @@ public class DigSystem : MonoBehaviour
         return removed * td.size.y * CellArea;
     }
     // Return the accepted volume so a saturated terrain never silently deletes soil.
-    public float Add(Vector3 point, float radius, float volume)
+    public float Add(Vector3 point, float radius, float volume, bool deferUpdates = false)
     {
         if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0f;
@@ -142,7 +155,12 @@ public class DigSystem : MonoBehaviour
             remaining = Mathf.Max(0, remaining - added);
             if (!clipped || added <= 0) break;
         }
-        td.SetHeights(x0, z0, heights);
+        if (deferUpdates)
+        {
+            td.SetHeightsDelayLOD(x0, z0, heights);
+            terrainDirty = true;
+        }
+        else td.SetHeights(x0, z0, heights);
         return Mathf.Min(volume, accepted * td.size.y * CellArea);
     }
     public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0)

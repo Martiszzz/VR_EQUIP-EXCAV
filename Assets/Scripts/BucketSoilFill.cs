@@ -17,6 +17,8 @@ public class BucketSoilFill : MonoBehaviour
     public Mesh SurfaceMesh => mesh;
     public bool IsVisible => surface && surface.enabled;
     public float Amount { get; private set; }
+    public float TargetAmount { get; private set; }
+    float amountVelocity;
 
     public void Initialize(BucketInside bucket)
     {
@@ -94,6 +96,20 @@ public class BucketSoilFill : MonoBehaviour
     { triangles.AddRange(new[] {a,b,a+layer, b,b+layer,a+layer}); }
 
     public void SetAmount(float amount)
+    {
+        TargetAmount = Mathf.Clamp01(amount);
+        amountVelocity = 0;
+        ApplyAmount(TargetAmount);
+    }
+    public void SetTargetAmount(float amount) { TargetAmount = Mathf.Clamp01(amount); }
+    public void Step(float dt)
+    {
+        if (dt <= 0 || Mathf.Abs(Amount - TargetAmount) < 0.00001f) return;
+        float next = Mathf.SmoothDamp(Amount, TargetAmount, ref amountVelocity, 0.12f, Mathf.Infinity, dt);
+        if (Mathf.Abs(next - TargetAmount) < 0.0001f) next = TargetAmount;
+        ApplyAmount(next);
+    }
+    void ApplyAmount(float amount)
     {
         Amount = Mathf.Clamp01(amount);
         if (!mesh) return;

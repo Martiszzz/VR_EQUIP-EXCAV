@@ -7,6 +7,17 @@ using UnityEngine;
 // Unity -batchmode -nographics -executeMethod IntegrationValidation.Run
 public static class IntegrationValidation
 {
+    public static void InspectGround()
+    {
+        EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+        var dig = UnityEngine.Object.FindAnyObjectByType<DigSystem>();
+        var p = dig.bucket.PourPosition(0);
+        Physics.SyncTransforms();
+        Debug.Log($"GROUND terrain={dig.terrain.name} position={dig.terrain.transform.position} surfaceAtBucket={dig.SurfaceY(p)} bucket={p}");
+        foreach (var hit in Physics.RaycastAll(p + Vector3.up * 10, Vector3.down, 30, ~0, QueryTriggerInteraction.Ignore))
+            Debug.Log($"GROUND HIT {hit.collider.name} {hit.collider.GetType().Name} at {hit.point}");
+        EditorApplication.Exit(0);
+    }
     public static void Run()
     {
         try
@@ -26,6 +37,7 @@ public static class IntegrationValidation
                 Require(tracks.leftLever && tracks.rightLever && tracks.excavator, "TrackDrive references missing.");
             CheckTerrain(dig);
             CheckFracture(dig);
+            CheckSoilDeposit(dig);
             CheckBucket(dig);
             CheckControls();
             CheckJoystickTilt();
@@ -137,7 +149,26 @@ public static class IntegrationValidation
             rig.rotation = originalRotation * Quaternion.Euler(-80, 0, 0);
             Require(bucket.PourStrength > shallowFlow, "Tipping further does not increase sand flow.");
             bucket.Step(Time.fixedDeltaTime);
-            Require(bucket.CapturedCount == 0 && !bucket.Fill.IsVisible, "Load still releases one chunk at a time.");
+            Require(bucket.CapturedCount == slots && bucket.Fill.IsVisible, "Sudden tipping deletes the whole load in one step.");
+            for (int i = 0; i < 60; i++) bucket.Step(0.02f);
+            int partial = bucket.CapturedCount;
+            Require(partial > 0 && partial < slots && bucket.Fill.IsVisible && bucket.Fill.Amount > 0.1f && bucket.Fill.Amount < 0.99f,
+                "Fill does not decrease progressively during partial pouring.");
+            rig.rotation = originalRotation;
+            for (int i = 0; i < 30; i++) bucket.Step(0.02f);
+            Require(bucket.CapturedCount == partial && bucket.Fill.IsVisible, "Leveling the bucket does not stop pouring.");
+            rig.rotation = originalRotation * Quaternion.Euler(-80, 0, 0);
+            bool groupReleased = false;
+            for (int i = 0; i < 1200 && bucket.CapturedCount > 0; i++)
+            {
+                int previous = bucket.CapturedCount;
+                bucket.Step(0.02f);
+                int released = previous - bucket.CapturedCount;
+                Require(released <= bucket.maxBatchSize, "Pouring exceeds the bounded group size.");
+                groupReleased |= released > 1;
+            }
+            for (int i = 0; i < 60; i++) bucket.Step(0.02f);
+            Require(groupReleased && bucket.CapturedCount == 0 && !bucket.Fill.IsVisible, "Gradual group pouring never finishes.");
             foreach (var block in blocks)
             {
                 Require(!block.IsHeld && !block.rb.isKinematic && block.GetComponent<SphereCollider>().enabled, "Dump did not restore physical soil.");
@@ -186,7 +217,7 @@ public static class IntegrationValidation
             rig.SetPositionAndRotation(originalPosition, originalRotation);
             foreach (var block in blocks) if (block) UnityEngine.Object.DestroyImmediate(block.gameObject);
         }
-        Debug.Log("BUCKET PASS: " + slots + " randomly packed bodies, connected mound, collective avalanche, collisions and pool reuse.");
+        Debug.Log("BUCKET PASS: random packing, gradual group flow, shrinking fill, pause/resume and pool reuse.");
     }
 
     static void CheckControls()
@@ -270,6 +301,54 @@ public static class IntegrationValidation
         }
         finally { dig.maxBlocks = limit; }
         Debug.Log("SOIL FRACTURE PASS: hard impacts, visible smaller clods, conserved volume and bounded fragment count.");
+    }
+    static void CheckSoilDeposit(DigSystem dig)
+    {
+        var original = dig.terrain.terrainData;
+        var collider = dig.terrain.GetComponent<TerrainCollider>();
+        var copy = UnityEngine.Object.Instantiate(original);
+        var mode = Physics.simulationMode;
+        var dropped = new List<DirtBlock>();
+        dig.terrain.terrainData = copy;
+        collider.terrainData = copy;
+        try
+        {
+            var point = dig.terrain.transform.position + new Vector3(copy.size.x * 0.5f, 0, copy.size.z * 0.75f);
+            point.y = dig.SurfaceY(point);
+            float before = point.y;
+            float expectedVolume = 0;
+            for (int i = 0; i < 12; i++)
+            {
+                var pos = point + new Vector3((i%3-1)*0.07f, 1f+(i/6)*0.08f, ((i/3)%2-0.5f)*0.07f);
+                var clod = i < 6 ? dig.Spawn(pos) : dig.Spawn(pos, dig.BlockVolume / 3f, 1);
+                // Exercise settled fragments as well as intact clods, without allowing more fracture in this controlled drop.
+                clod.breakSpeed = 100;
+                dropped.Add(clod);
+                expectedVolume += clod.Volume;
+            }
+            Physics.simulationMode = SimulationMode.Script;
+            Physics.SyncTransforms();
+            for (int i = 0; i < 500; i++)
+            {
+                Physics.Simulate(0.02f);
+                foreach (var clod in dropped) if (clod.gameObject.activeSelf) clod.Step(0.02f);
+                if (i%4 == 0) dig.FlushTerrainChanges();
+            }
+            dig.FlushTerrainChanges();
+            Require(dropped.TrueForAll(b => !b.gameObject.activeSelf), "Resting soil never merges into the terrain.");
+            Require(dig.SurfaceY(point) > before + 0.005f, "Dropped soil does not raise the landing area.");
+            var remote = point + Vector3.right * 2f;
+            Require(Mathf.Abs(dig.SurfaceY(remote) - before) < 0.001f, "Soil raises terrain away from the landing point.");
+            Debug.Log($"DEPOSIT PASS: landing area rose {dig.SurfaceY(point)-before:F4}m from {expectedVolume:F6} cubic meters of soil.");
+        }
+        finally
+        {
+            foreach (var clod in dropped) if (clod) { clod.breakSpeed = 1.6f; dig.Release(clod); }
+            Physics.simulationMode = mode;
+            dig.terrain.terrainData = original;
+            collider.terrainData = original;
+            UnityEngine.Object.DestroyImmediate(copy);
+        }
     }
     static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

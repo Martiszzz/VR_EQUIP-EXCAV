@@ -10,9 +10,16 @@ public class BucketInside : MonoBehaviour
     [Range(30f, 150f)] public float dumpAngle = 42f;
     [Range(0f, 0.4f)] public float finesFraction = 0.12f;
     [Min(0f)] public float wallPadding = 0.015f;
+    [Min(2f)] public float maxPourRate = 30f;
+    [Min(1f)] public float flowAcceleration = 45f;
+    [Range(0.06f, 0.2f)] public float batchInterval = 0.1f;
+    [Range(2, 8)] public int maxBatchSize = 5;
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
     Vector3 lastPosition, velocity;
+    Quaternion lastRotation;
+    bool motionInitialized;
+    float flowRate, releaseCredit, flowClock;
     float chunkSize = 0.06f;
     SandFlow sand;
     BucketSoilFill fill;
@@ -33,7 +40,11 @@ public class BucketInside : MonoBehaviour
         }
     }
     public bool IsFull => FreeSlots(chunkSize) == 0;
-    void Awake() { volume = GetComponent<BoxCollider>(); lastPosition = transform.position; }
+    void Awake()
+    {
+        volume = GetComponent<BoxCollider>(); lastPosition = transform.position;
+        lastRotation = transform.rotation; motionInitialized = true;
+    }
     void GetBounds(out Vector3 low, out Vector3 high)
     {
         if (!volume) volume = GetComponent<BoxCollider>();
@@ -101,14 +112,15 @@ public class BucketInside : MonoBehaviour
         RefreshFill();
     }
     public void Forget(DirtBlock block) { if (captured.Remove(block)) RefreshFill(); }
-    void RefreshFill()
+    void RefreshFill(bool gradual = false)
     {
         if (!fill)
         {
             fill = gameObject.AddComponent<BucketSoilFill>();
             fill.Initialize(this);
         }
-        fill.SetAmount(FillFraction);
+        if (gradual) fill.SetTargetAmount(FillFraction);
+        else fill.SetAmount(FillFraction);
     }
     public Vector3 PourPosition(float across)
     {
@@ -121,22 +133,52 @@ public class BucketInside : MonoBehaviour
     public void Step(float dt)
     {
         if (dt <= 0) return;
+        dt = Mathf.Min(dt, 0.05f);
+        if (!motionInitialized) { lastPosition = transform.position; lastRotation = transform.rotation; motionInitialized = true; }
         velocity = Vector3.ClampMagnitude((transform.position - lastPosition) / dt, 5f);
+        var turn = transform.rotation * Quaternion.Inverse(lastRotation);
+        turn.ToAngleAxis(out float angle, out var axis);
+        if (angle > 180) angle -= 360;
+        Vector3 angular = angle == 0 || axis.sqrMagnitude < 0.001f ? Vector3.zero :
+            Vector3.ClampMagnitude(axis * (angle * Mathf.Deg2Rad / dt), 4f);
         lastPosition = transform.position;
+        lastRotation = transform.rotation;
         captured.RemoveAll(b => !b || !b.gameObject.activeSelf);
-        if (!IsDumping || captured.Count == 0) return;
-        if (!sand) { sand = gameObject.AddComponent<SandFlow>(); sand.Initialize(this); }
-        // Unlock the whole load together. Gravity and contacts determine the avalanche, not a timer.
-        float strength = PourStrength;
-        for (int i = captured.Count - 1; i >= 0; i--)
+        if (fill) fill.Step(dt);
+        if (!IsDumping || captured.Count == 0)
         {
-            var block = captured[i];
+            flowRate = Mathf.MoveTowards(flowRate, 0, flowAcceleration * dt);
+            releaseCredit = flowClock = 0;
+            return;
+        }
+        if (!sand) { sand = gameObject.AddComponent<SandFlow>(); sand.Initialize(this); }
+        float strength = PourStrength;
+        // Soil accelerates into a bounded, irregular stream; sudden tipping cannot empty the load in one frame.
+        float desired = maxPourRate * strength * Mathf.Sqrt(FillFraction);
+        flowRate = Mathf.MoveTowards(flowRate, desired, flowAcceleration * dt);
+        releaseCredit += flowRate * dt;
+        flowClock += dt;
+        if (flowClock < batchInterval || releaseCredit < Mathf.Min(2, captured.Count)) return;
+        flowClock = 0;
+        int count = Mathf.Min(captured.Count, maxBatchSize, Mathf.FloorToInt(releaseCredit));
+        for (int n = 0; n < count; n++)
+        {
+            int next = 0; float best = float.NegativeInfinity;
+            for (int i = 0; i < captured.Count; i++)
+            {
+                var p = captured[i].transform.localPosition;
+                float score = p.y + p.z * 0.65f + Random.Range(-0.004f, 0.004f);
+                if (score > best) { best = score; next = i; }
+            }
+            var block = captured[next];
+            captured.RemoveAt(next);
             Vector3 sliding = transform.TransformDirection(lipAxis.normalized) * Mathf.Lerp(0.04f, 0.15f, strength);
-            Vector3 launch = velocity + sliding + transform.right * Random.Range(-0.04f, 0.04f);
+            Vector3 inherited = velocity + Vector3.Cross(angular, block.transform.position - transform.position);
+            Vector3 launch = inherited + sliding + transform.right * Random.Range(-0.04f, 0.04f);
             block.DropAsSoil(block.transform.position, launch);
             sand.EmitLoose(block.transform.position, launch, block.Volume * finesFraction);
         }
-        captured.Clear();
-        RefreshFill();
+        releaseCredit -= count;
+        RefreshFill(true);
     }
 }

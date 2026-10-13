@@ -7,6 +7,8 @@ public class DirtBlock : MonoBehaviour
     public bool IsHeld { get; private set; }
     public int FractureLevel { get; private set; }
     [Min(0.5f)] public float breakSpeed = 1.6f;
+    [Min(0.04f)] public float depositRadius = 0.12f;
+    [Min(0.1f)] public float settleTime = 0.6f;
     DigSystem owner;
     BucketInside bucket;
     Collider[] colliders;
@@ -15,6 +17,8 @@ public class DirtBlock : MonoBehaviour
     SphereCollider soilCollider;
     Vector3 originalColliderSize;
     float calm, age;
+    float supportClock;
+    bool supported;
 
     public void Activate(Vector3 pos, DigSystem system, float volume, int fractureLevel = 0)
     {
@@ -47,6 +51,7 @@ public class DirtBlock : MonoBehaviour
         SetColliders(true);
         IsHeld = false;
         calm = age = 0;
+        supportClock = 0; supported = false;
     }
     public void Hold(BucketInside container)
     {
@@ -72,6 +77,7 @@ public class DirtBlock : MonoBehaviour
         rb.linearVelocity = Vector3.ClampMagnitude(velocity, 5f);
         rb.WakeUp();
         calm = age = 0;
+        supportClock = 0; supported = false;
     }
     public void DropAsSoil(Vector3 position, Vector3 velocity)
     {
@@ -132,19 +138,38 @@ public class DirtBlock : MonoBehaviour
         foreach (var c in colliders) c.enabled = value;
         if (grainCollider) grainCollider.enabled = false;
     }
-    void FixedUpdate()
+    bool HasGroundSupport()
     {
-        if (!owner || IsHeld) return;
-        age += Time.fixedDeltaTime;
+        float radius = soilCollider.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
+        // A resting clod may be supported by other soil, rather than touching the heightmap itself.
+        if (Physics.Raycast(rb.position, Vector3.down, out var hit, radius + 0.035f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider == owner.terrain.GetComponent<TerrainCollider>()) return true;
+            var otherSoil = hit.collider.GetComponentInParent<DirtBlock>();
+            return otherSoil && otherSoil != this && !otherSoil.IsHeld && rb.position.y - owner.SurfaceY(rb.position) < 1f;
+        }
+        return rb.position.y - radius <= owner.SurfaceY(rb.position) + 0.015f;
+    }
+    void FixedUpdate() { Step(Time.fixedDeltaTime); }
+    public void Step(float dt)
+    {
+        if (!owner || IsHeld || !gameObject.activeSelf || dt <= 0) return;
+        age += dt;
         bool inBucket = owner.bucket && owner.bucket.Contains(this);
         if (!owner.ContainsTerrainPoint(transform.position)) return;
         float surface = owner.SurfaceY(transform.position);
-        bool touchingGround = transform.position.y - transform.lossyScale.y * 0.5f <= surface + 0.08f;
-        calm = touchingGround && rb.linearVelocity.sqrMagnitude < 0.04f ? calm + Time.fixedDeltaTime : 0f;
-        bool fellThrough = transform.position.y < surface - 0.3f;
-        if (!inBucket && age > 0.3f && (calm > 1f || fellThrough))
+        if (rb.linearVelocity.sqrMagnitude < 0.04f)
         {
-            float added = owner.Add(transform.position, Mathf.Max(0.2f, owner.blockSize * 2f), Volume);
+            supportClock -= dt;
+            if (supportClock <= 0) { supported = HasGroundSupport(); supportClock = 0.1f; }
+            calm = supported ? calm + dt : 0;
+        }
+        else { calm = supportClock = 0; supported = false; }
+        bool fellThrough = transform.position.y < surface - 0.3f;
+        if (!inBucket && age > 0.3f && (calm > settleTime || fellThrough))
+        {
+            float radius = Mathf.Max(depositRadius, Mathf.Pow(Volume, 1f / 3f) * 1.5f);
+            float added = owner.Add(rb.position, radius, Volume, true);
             Volume -= added;
             if (Volume <= owner.BlockVolume * 0.001f) owner.Release(this);
         }

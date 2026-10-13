@@ -55,7 +55,7 @@ public static class SandPreview
         Physics.SyncTransforms();
         var previousSimulationMode = Physics.simulationMode;
         Physics.simulationMode = SimulationMode.Script;
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 60; i++)
         {
             bucket.Step(0.02f);
             bucket.Sand.Particles.Simulate(0.02f, false, false, true);
