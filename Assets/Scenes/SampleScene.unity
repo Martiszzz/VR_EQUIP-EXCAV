@@ -291,7 +291,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -329,7 +329,7 @@ MonoBehaviour:
   terrain: {fileID: 302056367}
   blockPrefab: {fileID: 2230047633501843805, guid: 96994b9d6136d79429d58c7455455e87, type: 3}
   bucket: {fileID: 1249843220}
-  blockSize: 0.15
+  blockSize: 0.06
   maxBlocks: 250
 --- !u!4 &568196566
 Transform:
@@ -763,7 +763,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -817,9 +817,9 @@ MonoBehaviour:
   rightLever: {fileID: 7474370918123358344}
   excavator: {fileID: 1113508163246883981}
   forwardAxis: {x: 0, y: 0, z: 1}
-  moveSpeed: 1
-  turnSpeed: 40
-  deadzone: 0.1
+  moveSpeed: 0.7
+  turnSpeed: 25
+  deadzone: 0.12
   throttle: {fileID: 0}
 --- !u!1 &817075155
 GameObject:
@@ -1137,8 +1137,8 @@ MonoBehaviour:
   head: {fileID: 856360969}
   touchRadius: 0.03
   maxAngle: 25
-  followSpeed: 300
-  returnSpeed: 150
+  followSpeed: 100
+  returnSpeed: 65
   invertForward: 0
   invertSide: 0
   extraTips: []
@@ -1726,7 +1726,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -1852,7 +1852,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -2134,8 +2134,8 @@ Transform:
   m_GameObject: {fileID: 1738130277}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.0199, z: -0.1689}
-  m_LocalScale: {x: 1, y: 1, z: 0.0073885955}
+  m_LocalPosition: {x: 0.00055038615, y: 0.067475885, z: -0.196}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1249843221}
@@ -2557,11 +2557,11 @@ MonoBehaviour:
   input: 0
   target: {fileID: 5701651948974088746}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 40
+  speed: 22
   limit: 1
   minAngle: -40
   maxAngle: 20
-  deadzone: 0.1
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -2581,11 +2581,11 @@ MonoBehaviour:
   input: 0
   target: {fileID: 2540124487336731028}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 40
+  speed: 22
   limit: 1
   minAngle: -20
   maxAngle: 30
-  deadzone: 0.1
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -2605,11 +2605,11 @@ MonoBehaviour:
   input: 1
   target: {fileID: 8785660220177547002}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 40
+  speed: 28
   limit: 1
-  minAngle: -45
-  maxAngle: 45
-  deadzone: 0.1
+  minAngle: -65
+  maxAngle: 85
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -2633,7 +2633,7 @@ MonoBehaviour:
   limit: 0
   minAngle: -360
   maxAngle: 360
-  deadzone: 0.1
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 1
   throttle: {fileID: 0}
@@ -2653,11 +2653,11 @@ MonoBehaviour:
   input: 1
   target: {fileID: 3157918958855767196}
   localAxis: {x: 0, y: 0, z: 1}
-  speed: 40
+  speed: 16
   limit: 1
-  minAngle: -45
-  maxAngle: 45
-  deadzone: 0.1
+  minAngle: -25
+  maxAngle: 25
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -2677,11 +2677,11 @@ MonoBehaviour:
   input: 0
   target: {fileID: 4234575168581666603}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 40
+  speed: 22
   limit: 1
-  minAngle: -45
-  maxAngle: 45
-  deadzone: 0.1
+  minAngle: -30
+  maxAngle: 30
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -2701,11 +2701,11 @@ MonoBehaviour:
   input: 0
   target: {fileID: 8488504430534877925}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 40
+  speed: 22
   limit: 1
-  minAngle: -45
-  maxAngle: 45
-  deadzone: 0.1
+  minAngle: -30
+  maxAngle: 30
+  deadzone: 0.12
   invert: 0
   useWorldAxis: 0
   throttle: {fileID: 0}
@@ -5680,9 +5680,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 30
+  maxAngle: 25
   returnToCenter: 1
-  returnSpeed: 200
+  returnSpeed: 75
   invertForward: 0
   invertSide: 0
 --- !u!114 &7119197045842624718
@@ -5893,9 +5893,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 30
+  maxAngle: 25
   returnToCenter: 1
-  returnSpeed: 200
+  returnSpeed: 75
   invertForward: 0
   invertSide: 0
 --- !u!114 &7474370918123358345
@@ -6064,9 +6064,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 30
+  maxAngle: 25
   returnToCenter: 1
-  returnSpeed: 200
+  returnSpeed: 75
   invertForward: 0
   invertSide: 0
 --- !u!114 &7611461237230684709
@@ -6186,9 +6186,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 30
-  returnToCenter: 0
-  returnSpeed: 200
+  maxAngle: 25
+  returnToCenter: 1
+  returnSpeed: 75
   invertForward: 0
   invertSide: 0
 --- !u!114 &7731109980590164692
@@ -6713,9 +6713,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 30
+  maxAngle: 25
   returnToCenter: 1
-  returnSpeed: 200
+  returnSpeed: 75
   invertForward: 0
   invertSide: 0
 --- !u!114 &9107482286238615051

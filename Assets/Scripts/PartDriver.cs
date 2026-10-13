@@ -1,42 +1,50 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class PartDriver : MonoBehaviour
 {
     public enum Axis { Forward, Side }
-
     public LeverBase lever;
     public Axis input = Axis.Forward;
     public Transform target;
-    public Vector3 localAxis = Vector3.right;  // aplink kurią ašį sukasi (dalies lokali)
-    public float speed = 40f;                  // laipsniai per sekundę
-    public bool limit = true;                  // swing sukimui išjunk
+    public Vector3 localAxis = Vector3.right;
+    [Min(1f)] public float speed = 22f;
+    public bool limit = true;
     public float minAngle = -45f, maxAngle = 45f;
-    public float deadzone = 0.1f;
-    public bool invert;
-    public bool useWorldAxis;
+    [Range(0f, 0.4f)] public float deadzone = 0.12f;
+    [Min(1f)] public float acceleration = 45f;
+    [Min(1f)] public float braking = 80f;
+    [Range(1f, 3f)] public float responseCurve = 1.6f;
+    public bool invert, useWorldAxis;
     public Throttle throttle;
-
-    float angle;
-
-    void Update()
+    float angle, angularVelocity;
+    Quaternion restRotation;
+    public float Angle => angle;
+    public float AngularVelocity => angularVelocity;
+    void Awake() { if (target) restRotation = target.localRotation; }
+    void FixedUpdate() { Step(Time.fixedDeltaTime); }
+    public void Step(float deltaTime)
     {
-        if (!Ignition.EngineRunning) return;
-        if (!lever || !target) return;
-
-        float v = input == Axis.Forward ? lever.Forward : lever.Side;
-        float a = Mathf.Abs(v);
-        if (a < deadzone) return;
-        v = Mathf.Sign(v) * (a - deadzone) / (1f - deadzone);
-        if (invert) v = -v;
-
-        float t = throttle ? throttle.Value : 1f;
-        float newAngle = angle + v * speed * t * Time.deltaTime;
-        if (limit) newAngle = Mathf.Clamp(newAngle, minAngle, maxAngle);
-
-        if (useWorldAxis)
-            target.Rotate(Vector3.up, newAngle - angle, Space.World);
-        else
-            target.Rotate(localAxis.normalized, newAngle - angle, Space.Self);
-        angle = newAngle;
+        if (!lever || !target || deltaTime <= 0) return;
+        float v = Ignition.EngineRunning ? (input == Axis.Forward ? lever.Forward : lever.Side) : 0;
+        float a = Mathf.Clamp01((Mathf.Abs(v) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
+        v = Mathf.Sign(v) * Mathf.Pow(a, responseCurve) * (invert ? -1 : 1);
+        float desired = v * speed * (throttle ? Mathf.Clamp01(throttle.Value) : 1f);
+        float rate = Mathf.Abs(desired) < Mathf.Abs(angularVelocity) || desired * angularVelocity < 0 ? braking : acceleration;
+        if (limit)
+        {
+            float remaining = desired >= 0 ? maxAngle - angle : angle - minAngle;
+            desired = Mathf.Clamp(desired, -Mathf.Sqrt(2f * braking * Mathf.Max(0, remaining)),
+                Mathf.Sqrt(2f * braking * Mathf.Max(0, remaining)));
+        }
+        angularVelocity = Mathf.MoveTowards(angularVelocity, desired, rate * deltaTime);
+        float next = angle + angularVelocity * deltaTime;
+        if (limit)
+        {
+            next = Mathf.Clamp(next, minAngle, maxAngle);
+            if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
+        }
+        if (useWorldAxis) target.Rotate(Vector3.up, next - angle, Space.World);
+        else target.localRotation = restRotation * Quaternion.AngleAxis(next, localAxis.normalized);
+        angle = limit ? next : Mathf.Repeat(next + 180f, 360f) - 180f;
     }
 }
