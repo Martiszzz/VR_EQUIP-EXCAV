@@ -27,6 +27,7 @@ public static class IntegrationValidation
             CheckTerrain(dig);
             CheckBucket(dig);
             CheckControls();
+            CheckJoystickTilt();
             Debug.Log("INTEGRATION PASS: scene, volume-limited digging, refill, terrain edges, bucket packing/dumping/pooling, smooth movement and joint limits.");
             EditorApplication.Exit(0);
         }
@@ -99,6 +100,11 @@ public static class IntegrationValidation
                 bucket.Capture(block);
                 blocks.Add(block);
                 Require(block.IsHeld && block.rb.isKinematic && bucket.Contains(block), "Soil not retained in bucket.");
+                var mesh = block.GetComponent<MeshFilter>().sharedMesh;
+                Require(mesh && mesh.name.StartsWith("Earth clod") && mesh.triangles.Length > 36,
+                    "Captured earth still uses the cube mesh.");
+                Require(mesh.bounds.size.x <= 1 && mesh.bounds.size.y <= 1 && mesh.bounds.size.z <= 1,
+                    "Earth clod protrudes outside its reserved slot.");
             }
             Require(bucket.FreeSlots(dig.blockSize) == 0 && !bucket.TryGetSpawnPosition(dig.blockSize, out _), "Full bucket permits more soil.");
             var before = blocks[0].transform.position;
@@ -195,6 +201,24 @@ public static class IntegrationValidation
                 driver.lever.Forward = forward; driver.lever.Side = side;
             }
         }
+    }
+    static void CheckJoystickTilt()
+    {
+        foreach (var stem in new[] {Vector3.forward, Vector3.up})
+        {
+            Require(JoystickMotion.HandAngles(stem, stem).sqrMagnitude < 0.0001f, "Neutral joystick input is not centered.");
+            for (int pitch = -45; pitch <= 45; pitch += 5)
+            for (int side = -45; side <= 45; side += 5)
+            {
+                var q = JoystickMotion.Tilt(pitch, side, stem, 25);
+                Require(Mathf.Abs(Vector3.Dot(new Vector3(q.x, q.y, q.z), stem)) < 0.00001f,
+                    "Joystick twists around its own stem.");
+                Require(Vector3.Angle(stem, q * stem) <= 25.001f, "Joystick exceeds its tilt cone.");
+            }
+        }
+        var right = JoystickMotion.HandAngles(new Vector3(0.1f, 0, 1), Vector3.forward);
+        Require(right.y > 0 && Mathf.Abs(right.x) < 0.001f, "Z-axis joystick side input is incorrect.");
+        Debug.Log("JOYSTICK PASS: native axes, centered input, no axial twist, bounded diagonal tilt.");
     }
     static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

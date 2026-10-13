@@ -26,6 +26,7 @@ public class DirtBlock : MonoBehaviour
             if (grainCollider) originalColliderSize = grainCollider.size;
         }
         foreach (var renderer in renderers) renderer.enabled = true;
+        SoilClodVisual.Apply(gameObject);
         if (grainCollider) grainCollider.size = originalColliderSize;
         transform.SetPositionAndRotation(pos, Quaternion.identity);
         gameObject.SetActive(true);

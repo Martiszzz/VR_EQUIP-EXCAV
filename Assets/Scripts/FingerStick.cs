@@ -10,6 +10,7 @@ public class FingerStick : LeverBase
     public float returnSpeed = 65f;
     [Min(0.02f)] public float responseTime = 0.16f;
     public bool invertForward, invertSide;
+    public Vector3 stemAxis = Vector3.up;
     public Transform[] extraTips;
     Quaternion restLocalRot;
     float pitch, roll, pitchVelocity, rollVelocity;
@@ -50,8 +51,9 @@ public class FingerStick : LeverBase
         {
             var restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
             var d = Quaternion.Inverse(restFrame) * (tip - transform.position);
-            float handPitch = Mathf.Atan2(d.z, d.y) * Mathf.Rad2Deg;
-            float handRoll = Mathf.Atan2(-d.x, d.y) * Mathf.Rad2Deg;
+            var handAngles = JoystickMotion.HandAngles(d, stemAxis);
+            float handPitch = handAngles.x;
+            float handRoll = handAngles.y;
             if (!touching)
             {
                 grabPitch = handPitch; grabRoll = handRoll;
@@ -72,7 +74,7 @@ public class FingerStick : LeverBase
         roll = Mathf.SmoothDamp(roll, targetRoll, ref rollVelocity, responseTime, held ? followSpeed : returnSpeed);
         var limited = Vector2.ClampMagnitude(new Vector2(pitch, roll), maxAngle);
         pitch = limited.x; roll = limited.y;
-        transform.localRotation = restLocalRot * Quaternion.Euler(pitch, 0, roll);
+        transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
         Forward = (invertForward ? -1 : 1) * pitch / Mathf.Max(1f, maxAngle);
         Side = (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
     }
