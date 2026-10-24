@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class TrackDrive : MonoBehaviour
 {
@@ -12,7 +12,13 @@ public class TrackDrive : MonoBehaviour
     [Min(0.01f)] public float braking = 1.2f;
     [Min(1f)] public float turnAcceleration = 40f;
     public Throttle throttle;
+    public bool blockByWorld = true;
     float velocity, yawVelocity;
+    ExcavatorBody.Probe probe;
+    void Awake()
+    {
+        if (excavator && blockByWorld) probe = ExcavatorBody.For(excavator).CreateProbe(excavator);
+    }
     float Input(float value)
     {
         if (!Ignition.EngineRunning) return 0;
@@ -28,7 +34,31 @@ public class TrackDrive : MonoBehaviour
         bool slowing = Mathf.Abs(desired) < Mathf.Abs(velocity) || desired * velocity < 0;
         velocity = Mathf.MoveTowards(velocity, desired, (slowing ? braking : acceleration) * Time.fixedDeltaTime);
         yawVelocity = Mathf.MoveTowards(yawVelocity, (l - r) * 0.5f * turnSpeed * t, turnAcceleration * Time.fixedDeltaTime);
-        excavator.Translate(forwardAxis.normalized * velocity * Time.fixedDeltaTime, Space.Self);
-        excavator.Rotate(Vector3.up, yawVelocity * Time.fixedDeltaTime, Space.World);
+
+        if (Mathf.Abs(velocity) > 0.0001f)
+        {
+            Vector3 p = excavator.position; Quaternion q = excavator.rotation;
+            excavator.Translate(forwardAxis.normalized * velocity * Time.fixedDeltaTime, Space.Self);
+            if (!Accept(p, q)) velocity = 0;
+        }
+        if (Mathf.Abs(yawVelocity) > 0.0001f)
+        {
+            Vector3 p = excavator.position; Quaternion q = excavator.rotation;
+            excavator.Rotate(Vector3.up, yawVelocity * Time.fixedDeltaTime, Space.World);
+            if (!Accept(p, q)) yawVelocity = 0;
+        }
+    }
+
+    bool Accept(Vector3 oldPos, Quaternion oldRot)
+    {
+        if (probe == null) return true;
+        Physics.SyncTransforms();
+        float after = probe.Depth(true);   // true: grindų kontaktai iš apačios ignoruojami
+        if (after <= probe.Tolerance) return true;
+        Vector3 p = excavator.position; Quaternion q = excavator.rotation;
+        excavator.SetPositionAndRotation(oldPos, oldRot);
+        Physics.SyncTransforms();
+        if (after < probe.Depth(true) - 0.0005f) { excavator.SetPositionAndRotation(p, q); return true; }
+        return false;
     }
 }

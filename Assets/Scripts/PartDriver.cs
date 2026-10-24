@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PartDriver : MonoBehaviour
 {
@@ -16,14 +16,20 @@ public class PartDriver : MonoBehaviour
     [Range(1f, 3f)] public float responseCurve = 1.6f;
     public bool invert, useWorldAxis;
     public Throttle throttle;
+    public bool blockByWorld = true;
     float angle, angularVelocity;
     Quaternion restRotation;
+    ExcavatorBody.Probe probe;
     public float Angle => angle;
     public float AngularVelocity => angularVelocity;
     void Awake() { Initialize(); }
     public void Initialize()
     {
-        if (target) restRotation = target.localRotation;
+        if (target)
+        {
+            restRotation = target.localRotation;
+            if (blockByWorld) probe = ExcavatorBody.For(target).CreateProbe(target);
+        }
         angle = angularVelocity = 0;
     }
     void FixedUpdate() { Step(Time.fixedDeltaTime); }
@@ -48,8 +54,27 @@ public class PartDriver : MonoBehaviour
             next = Mathf.Clamp(next, minAngle, maxAngle);
             if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
         }
+        Quaternion old = target.localRotation;
         if (useWorldAxis) target.Rotate(Vector3.up, next - angle, Space.World);
         else target.localRotation = restRotation * Quaternion.AngleAxis(next, localAxis.normalized);
+        if (probe != null && Mathf.Abs(next - angle) > 0.0001f && !Accept(old))
+        {
+            angularVelocity = 0;   // atsimušė į kliūtį, kampas lieka senas
+            return;
+        }
         angle = limit ? next : Mathf.Repeat(next + 180f, 360f) - 180f;
+    }
+
+    bool Accept(Quaternion old)
+    {
+        Physics.SyncTransforms();
+        float after = probe.Depth(false);
+        if (after <= probe.Tolerance) return true;
+        Quaternion moved = target.localRotation;
+        target.localRotation = old;
+        Physics.SyncTransforms();
+        // jei judesys mažina persidengimą (dalis išlenda), leidžiam
+        if (after < probe.Depth(false) - 0.0005f) { target.localRotation = moved; return true; }
+        return false;
     }
 }

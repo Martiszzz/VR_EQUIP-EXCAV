@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class DigSystem : MonoBehaviour
@@ -34,9 +34,9 @@ public class DigSystem : MonoBehaviour
     static void ResetStatic() { I = null; }
     void Awake()
     {
-        if (!terrain || !terrain.terrainData || !blockPrefab || !bucket)
+        if (!terrain || !terrain.terrainData)
         {
-            Debug.LogError("DigSystem requires terrain, a dirt prefab and a bucket.", this);
+            Debug.LogError("DigSystem requires terrain", this);
             enabled = false;
             return;
         }
@@ -46,6 +46,7 @@ public class DigSystem : MonoBehaviour
         terrain.terrainData = runtimeData;
         var collider = terrain.GetComponent<TerrainCollider>();
         if (collider) collider.terrainData = runtimeData;
+        ApplyEarthGround(runtimeData);
     }
     void OnDestroy()
     {
@@ -59,6 +60,46 @@ public class DigSystem : MonoBehaviour
         }
         Destroy(runtimeData);
     }
+
+    // Visas terrain padengiamas šviesia žeme; antras sluoksnis (tamsi žemė) pradžioje nematomas.
+    static void ApplyEarthGround(TerrainData td)
+    {
+        td.terrainLayers = new[] { SoilClodVisual.GroundLayer, SoilClodVisual.DumpedLayer };
+        int r = td.alphamapResolution;
+        var alpha = new float[r, r, 2];
+        for (int y = 0; y < r; y++)
+            for (int x = 0; x < r; x++) alpha[y, x, 0] = 1f;
+        td.SetAlphamaps(0, 0, alpha);
+    }
+
+    // Užtepa tamsią žemę ten, kur supilta arba iškasta.
+    void PaintDumped(Vector3 world, float radius, float strength)
+    {
+        var td = terrain.terrainData;
+        if (td.alphamapLayers < 2) return;
+        int res = td.alphamapResolution;
+        Vector3 local = world - terrain.transform.position;
+        float cx = local.x / td.size.x * (res - 1), cz = local.z / td.size.z * (res - 1);
+        float rx = Mathf.Max(1.5f, radius / td.size.x * (res - 1));
+        float rz = Mathf.Max(1.5f, radius / td.size.z * (res - 1));
+        int x0 = Mathf.Max(0, Mathf.FloorToInt(cx - rx)), z0 = Mathf.Max(0, Mathf.FloorToInt(cz - rz));
+        int w = Mathf.Min(res - 1, Mathf.CeilToInt(cx + rx)) - x0 + 1;
+        int h = Mathf.Min(res - 1, Mathf.CeilToInt(cz + rz)) - z0 + 1;
+        if (w <= 0 || h <= 0) return;
+        var maps = td.GetAlphamaps(x0, z0, w, h);
+        for (int z = 0; z < h; z++)
+            for (int x = 0; x < w; x++)
+            {
+                float dx = (x0 + x - cx) / rx, dz = (z0 + z - cz) / rz;
+                float weight = Mathf.Max(0f, 1f - dx * dx - dz * dz);
+                if (weight <= 0f) continue;
+                float a = Mathf.Min(1f, maps[z, x, 1] + strength * weight);
+                maps[z, x, 1] = a;
+                maps[z, x, 0] = 1f - a;
+            }
+        td.SetAlphamaps(x0, z0, maps);
+    }
+
     public bool ContainsTerrainPoint(Vector3 point)
     {
         if (!terrain || !terrain.terrainData) return false;
@@ -103,25 +144,26 @@ public class DigSystem : MonoBehaviour
         float sum = 0;
         float floor = Mathf.Max(0, (floorY - terrain.transform.position.y) / td.size.y);
         for (int z = 0; z < h; z++)
-        for (int x = 0; x < w; x++)
-        {
-            float cut = Mathf.Min(depth * Weight(x0, z0, x, z, cx, cz, rx, rz) / td.size.y,
-                Mathf.Max(0, heights[z, x] - floor));
-            cuts[z, x] = cut;
-            sum += cut;
-        }
+            for (int x = 0; x < w; x++)
+            {
+                float cut = Mathf.Min(depth * Weight(x0, z0, x, z, cx, cz, rx, rz) / td.size.y,
+                    Mathf.Max(0, heights[z, x] - floor));
+                cuts[z, x] = cut;
+                sum += cut;
+            }
         float available = sum * td.size.y * CellArea;
         if (available <= 0) return 0;
         float ratio = Mathf.Min(1f, maxVolume / available);
         float removed = 0;
         for (int z = 0; z < h; z++)
-        for (int x = 0; x < w; x++)
-        {
-            float before = heights[z, x];
-            heights[z, x] -= cuts[z, x] * ratio;
-            removed += before - heights[z, x];
-        }
+            for (int x = 0; x < w; x++)
+            {
+                float before = heights[z, x];
+                heights[z, x] -= cuts[z, x] * ratio;
+                removed += before - heights[z, x];
+            }
         td.SetHeights(x0, z0, heights);
+        if (removed > 0f) PaintDumped(point, radius * 1.1f, 1f);
         return removed * td.size.y * CellArea;
     }
     // Return the accepted volume so a saturated terrain never silently deletes soil.
@@ -137,20 +179,20 @@ public class DigSystem : MonoBehaviour
         {
             float sumW = 0;
             for (int z = 0; z < h; z++)
-            for (int x = 0; x < w; x++)
-                if (heights[z, x] < 1f) sumW += Weight(x0, z0, x, z, cx, cz, rx, rz);
+                for (int x = 0; x < w; x++)
+                    if (heights[z, x] < 1f) sumW += Weight(x0, z0, x, z, cx, cz, rx, rz);
             if (sumW <= 0) break;
             float added = 0;
             bool clipped = false;
             for (int z = 0; z < h; z++)
-            for (int x = 0; x < w; x++)
-            {
-                float desired = remaining * Weight(x0, z0, x, z, cx, cz, rx, rz) / sumW;
-                float before = heights[z, x];
-                heights[z, x] = Mathf.Min(1f, before + desired);
-                added += heights[z, x] - before;
-                clipped |= desired > 1f - before;
-            }
+                for (int x = 0; x < w; x++)
+                {
+                    float desired = remaining * Weight(x0, z0, x, z, cx, cz, rx, rz) / sumW;
+                    float before = heights[z, x];
+                    heights[z, x] = Mathf.Min(1f, before + desired);
+                    added += heights[z, x] - before;
+                    clipped |= desired > 1f - before;
+                }
             accepted += added;
             remaining = Mathf.Max(0, remaining - added);
             if (!clipped || added <= 0) break;
@@ -161,6 +203,7 @@ public class DigSystem : MonoBehaviour
             terrainDirty = true;
         }
         else td.SetHeights(x0, z0, heights);
+        if (accepted > 0f) PaintDumped(point, radius * 1.3f, 0.5f);
         return Mathf.Min(volume, accepted * td.size.y * CellArea);
     }
     public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0)
