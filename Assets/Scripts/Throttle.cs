@@ -19,7 +19,11 @@ public class Throttle : MonoBehaviour
     void Awake()
     {
         interactable = GetComponent<XRBaseInteractable>();
-        restLocalRot = transform.localRotation;
+        Value = Mathf.Clamp01(Value);
+        angle = Value * maxAngle;
+        // Keep the authored handle pose while retaining its configured starting power.
+        Vector3 ax = axis.normalized * (invert ? -1f : 1f);
+        restLocalRot = transform.localRotation * Quaternion.Inverse(Quaternion.AngleAxis(angle, ax));
     }
 
     void Update()

@@ -3251,7 +3251,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PartDriver
   lever: {fileID: 9107482286238615050}
   input: 1
-  target: {fileID: 0}
+  target: {fileID: 5345148430944160316}
   localAxis: {x: 0, y: 0, z: 1}
   speed: 10
   limit: 0
@@ -6198,7 +6198,7 @@ MonoBehaviour:
   axis: {x: 1, y: 0, z: 0}
   maxAngle: 40
   invert: 1
-  Value: 0
+  Value: 0.75
 --- !u!23 &7049425144782959559
 MeshRenderer:
   m_ObjectHideFlags: 0
