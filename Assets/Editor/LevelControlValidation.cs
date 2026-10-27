@@ -2,6 +2,8 @@ using System;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.XR.Interaction.Toolkit.Interactors;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion;
 
 public static class LevelControlValidation
 {
@@ -14,6 +16,15 @@ public static class LevelControlValidation
             foreach (string level in new[] { "Level 1", "Level 2" })
             {
                 var scene = EditorSceneManager.OpenScene($"Assets/Scenes/{level}.unity");
+                var seated = UnityEngine.Object.FindAnyObjectByType<SeatedExcavatorControls>();
+                Require(seated, $"{level}: seated controls are missing");
+                var interactors = seated.transform.root.GetComponentsInChildren<XRBaseInteractor>(true);
+                var active = Array.ConvertAll(interactors, i => i.gameObject.activeInHierarchy);
+                seated.DisableLocomotion();
+                foreach (var provider in seated.transform.root.GetComponentsInChildren<LocomotionProvider>(true))
+                    Require(!provider.gameObject.activeInHierarchy, $"{level}: thumbstick locomotion is still active");
+                for (int i = 0; i < interactors.Length; i++)
+                    Require(interactors[i].gameObject.activeInHierarchy == active[i], $"{level}: disabling walking also disables tool interaction");
                 foreach (var root in scene.GetRootGameObjects())
                 foreach (var t in root.GetComponentsInChildren<Transform>(true))
                     Require(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject) == 0, $"{level}: missing script on {t.name}");
@@ -35,6 +46,7 @@ public static class LevelControlValidation
                     CheckTracks(level, tracks);
                 Debug.Log($"LEVEL CONTROLS PASS: {level}, startup throttle, joint movement, tracks and engine stop.");
             }
+            BucketGroundValidation.Check();
             EditorApplication.Exit(0);
         }
         catch (Exception error) { Debug.LogException(error); EditorApplication.Exit(1); }

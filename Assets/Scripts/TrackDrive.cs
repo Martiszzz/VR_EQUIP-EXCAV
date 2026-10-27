@@ -54,11 +54,14 @@ public class TrackDrive : MonoBehaviour
         if (probe == null) return true;
         Physics.SyncTransforms();
         float after = probe.Depth(true);   // true: grindų kontaktai iš apačios ignoruojami
-        if (after <= probe.Tolerance) return true;
+        float groundAfter = probe.GroundDepth();
+        if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         Vector3 p = excavator.position; Quaternion q = excavator.rotation;
         excavator.SetPositionAndRotation(oldPos, oldRot);
         Physics.SyncTransforms();
-        if (after < probe.Depth(true) - 0.0005f) { excavator.SetPositionAndRotation(p, q); return true; }
+        bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(true) - 0.0005f;
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
+        if (worldAllowed && groundAllowed) { excavator.SetPositionAndRotation(p, q); return true; }
         return false;
     }
 }

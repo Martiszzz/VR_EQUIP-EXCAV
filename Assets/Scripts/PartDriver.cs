@@ -54,13 +54,20 @@ public class PartDriver : MonoBehaviour
             next = Mathf.Clamp(next, minAngle, maxAngle);
             if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
         }
-        Quaternion old = target.localRotation;
-        if (useWorldAxis) target.Rotate(Vector3.up, next - angle, Space.World);
-        else target.localRotation = restRotation * Quaternion.AngleAxis(next, localAxis.normalized);
-        if (probe != null && Mathf.Abs(next - angle) > 0.0001f && !Accept(old))
+        float from = angle;
+        int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(next - from) / 0.25f), 1, 64);
+        for (int i = 1; i <= steps; i++)
         {
-            angularVelocity = 0;   // atsimušė į kliūtį, kampas lieka senas
-            return;
+            float candidate = Mathf.Lerp(from, next, i / (float)steps);
+            Quaternion old = target.localRotation;
+            if (useWorldAxis) target.Rotate(Vector3.up, candidate - angle, Space.World);
+            else target.localRotation = restRotation * Quaternion.AngleAxis(candidate, localAxis.normalized);
+            if (probe != null && Mathf.Abs(candidate - angle) > 0.0001f && !Accept(old))
+            {
+                angularVelocity = 0;
+                return;
+            }
+            angle = candidate;
         }
         angle = limit ? next : Mathf.Repeat(next + 180f, 360f) - 180f;
     }
@@ -69,12 +76,15 @@ public class PartDriver : MonoBehaviour
     {
         Physics.SyncTransforms();
         float after = probe.Depth(false);
-        if (after <= probe.Tolerance) return true;
+        float groundAfter = probe.GroundDepth();
+        if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         Quaternion moved = target.localRotation;
         target.localRotation = old;
         Physics.SyncTransforms();
         // jei judesys mažina persidengimą (dalis išlenda), leidžiam
-        if (after < probe.Depth(false) - 0.0005f) { target.localRotation = moved; return true; }
+        bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(false) - 0.0005f;
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
+        if (worldAllowed && groundAllowed) { target.localRotation = moved; return true; }
         return false;
     }
 }

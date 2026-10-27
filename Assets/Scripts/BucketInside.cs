@@ -40,6 +40,26 @@ public class BucketInside : MonoBehaviour
         }
     }
     public bool IsFull => FreeSlots(chunkSize) == 0;
+    public float GroundPenetration(DigSystem system)
+    {
+        if (!system || system.bucket != this || !system.terrain ||
+            (FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && Ignition.EngineRunning)) return 0;
+        if (!volume) volume = GetComponent<BoxCollider>();
+        float depth = 0;
+        // Sample the oriented bucket volume, including the floor, sides and lip.
+        // This also reads newly dug/deposited heights before the terrain collider syncs.
+        for (int x = -2; x <= 2; x++)
+        for (int y = -2; y <= 2; y++)
+        for (int z = -2; z <= 2; z++)
+        {
+            if (Mathf.Abs(x) < 2 && Mathf.Abs(y) < 2 && Mathf.Abs(z) < 2) continue;
+            var p = transform.TransformPoint(volume.center + Vector3.Scale(volume.size * 0.25f, new Vector3(x, y, z)));
+            if (system.ContainsTerrainPoint(p)) depth = Mathf.Max(depth, system.SurfaceY(p) - p.y);
+        }
+        if (pourPoint && system.ContainsTerrainPoint(pourPoint.position))
+            depth = Mathf.Max(depth, system.SurfaceY(pourPoint.position) - pourPoint.position.y);
+        return depth;
+    }
     void Awake()
     {
         volume = GetComponent<BoxCollider>(); lastPosition = transform.position;

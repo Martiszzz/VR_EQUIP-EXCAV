@@ -29,11 +29,21 @@ public class ExcavatorBody : MonoBehaviour
         readonly ExcavatorBody body;
         readonly Transform part;
         readonly List<Collider> mine = new List<Collider>();
+        readonly List<BucketInside> buckets = new List<BucketInside>();
         float nextRefresh = -1f;
 
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
+
+        public float GroundDepth()
+        {
+            // Bucket contents change during digging, so check capacity on every proposed move.
+            part.GetComponentsInChildren<BucketInside>(false, buckets);
+            float depth = 0;
+            foreach (var bucket in buckets) depth = Mathf.Max(depth, bucket.GroundPenetration(DigSystem.I));
+            return depth;
+        }
 
         // Bendras persidengimo gylis tarp šios dalies (su visais vaikais) ir pasaulio kliūčių.
         // ignoreFloor: ignoruoja kontaktus iš apačios (vikšrai stovi ant grindų).
