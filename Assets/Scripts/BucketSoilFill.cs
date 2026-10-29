@@ -14,6 +14,9 @@ public class BucketSoilFill : MonoBehaviour
     Vector2[] detailPoints;
     float[] detailSizes;
     Vector3 low, high;
+    BucketInside container;
+    Vector2 distribution,distributionSlope;
+    float heightScale=1;
     public Mesh SurfaceMesh => mesh;
     public bool IsVisible => surface && surface.enabled;
     public float Amount { get; private set; }
@@ -22,6 +25,7 @@ public class BucketSoilFill : MonoBehaviour
 
     public void Initialize(BucketInside bucket)
     {
+        container=bucket;
         var box = bucket.GetComponent<BoxCollider>();
         var scale = bucket.transform.lossyScale;
         var padding = new Vector3(bucket.wallPadding / Mathf.Abs(scale.x), bucket.wallPadding / Mathf.Abs(scale.y),
@@ -95,6 +99,11 @@ public class BucketSoilFill : MonoBehaviour
     static void Side(int a, int b, int layer, List<int> triangles)
     { triangles.AddRange(new[] {a,b,a+layer, b,b+layer,a+layer}); }
 
+    public void SetDistribution(Vector2 offset,Vector2 slope)
+    {
+        if((distribution-offset).sqrMagnitude+(distributionSlope-slope).sqrMagnitude<0.00001f)return;
+        distribution=offset;distributionSlope=slope;ApplyAmount(Amount);
+    }
     public void SetAmount(float amount)
     {
         TargetAmount = Mathf.Clamp01(amount);
@@ -114,6 +123,17 @@ public class BucketSoilFill : MonoBehaviour
         Amount = Mathf.Clamp01(amount);
         if (!mesh) return;
         surface.enabled = Amount > 0.001f;
+        // Normalize the closed fill mesh to the actual stored bulk volume, including tilted/shifted surfaces.
+        float desired=Amount*(container?container.MaximumBulkFraction:0.6f);
+        float left=0,right=8;
+        for(int pass=0;pass<12;pass++)
+        {
+            float scale=(left+right)*0.5f,sum=0,weight=0;
+            for(int row=0;row<=Rows;row++)for(int col=0;col<=Columns;col++)
+            {float w=(row==0 || row==Rows?0.5f:1)*(col==0 || col==Columns?0.5f:1);sum+=Mathf.Clamp01(RawHeight(col/(float)Columns,row/(float)Rows)*scale)*w;weight+=w;}
+            if(sum/weight<desired)left=scale;else right=scale;
+        }
+        heightScale=(left+right)*0.5f;
         int layer = vertices.Length / 2;
         for (int y = 0; y <= Rows; y++)
         for (int x = 0; x <= Columns; x++)
@@ -137,13 +157,18 @@ public class BucketSoilFill : MonoBehaviour
             details[i].localPosition = p - Vector3.forward * size * 0.25f;
         }
     }
-    Vector3 SurfacePoint(float u, float v)
+    float RawHeight(float u,float v)
     {
-        float mound = Mathf.Exp(-((u-0.48f)*(u-0.48f)*8f + (v-0.40f)*(v-0.40f)*7f));
-        float roughness = (Mathf.PerlinNoise(u*19f+3, v*17f+11)-0.5f)*0.12f;
-        float frontSlope = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f-v) / 0.65f));
-        float height = Mathf.Clamp01(Amount * (0.48f + mound*0.48f + roughness) * frontSlope);
-        return new Vector3(Mathf.Lerp(low.x,high.x,u), Mathf.Lerp(low.y,high.y,v), Mathf.Lerp(low.z,high.z,height));
+        float cu=0.48f+distribution.x,cv=0.4f+distribution.y;
+        float mound=Mathf.Exp(-((u-cu)*(u-cu)*8+(v-cv)*(v-cv)*7));
+        float roughness=(Mathf.PerlinNoise(u*19+3,v*17+11)-0.5f)*0.12f;
+        float edge=Mathf.SmoothStep(0,1,Mathf.Clamp01((1-v)/0.65f));
+        return Mathf.Max(0.005f,(0.48f+mound*0.48f+roughness)*edge+Vector2.Dot(distributionSlope,new Vector2(u-0.5f,v-0.5f)));
+    }
+    Vector3 SurfacePoint(float u,float v)
+    {
+        float height=Amount>0?Mathf.Clamp01(RawHeight(u,v)*heightScale):0;
+        return new Vector3(Mathf.Lerp(low.x,high.x,u),Mathf.Lerp(low.y,high.y,v),Mathf.Lerp(low.z,high.z,height));
     }
     void OnDestroy()
     {

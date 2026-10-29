@@ -53,10 +53,35 @@ public class BucketInside : MonoBehaviour
     public BucketSoilFill Fill => fill;
     public int CapturedCount => captured.Count;
     public float HeldVolume { get { float total = 0; foreach(var clod in captured) if(clod && clod.gameObject.activeSelf) total += clod.Volume; return total; } }
+    public Vector2 LoadOffset {get;private set;}
+    public Vector2 LoadSlope {get;private set;}
+    Vector2 slideVelocity;
+    public float HeldMass {get {float mass=0;foreach(var clod in captured)if(clod)mass+=clod.Volume*SoilProperties.For(clod.Kind).density;return mass;}}
+    public float LoadAdhesion {get {float amount=0,total=0;foreach(var clod in captured)if(clod){amount+=clod.Volume*SoilProperties.For(clod.Kind).adhesion;total+=clod.Volume;}return total>0?amount/total:0;}}
+    public Vector3 SoilCenterOfMass
+    {
+        get {if(!volume)volume=GetComponent<BoxCollider>();var p=volume.center+new Vector3(LoadOffset.x*volume.size.x,LoadOffset.y*volume.size.y,-volume.size.z*(0.5f-FillFraction*0.35f));return transform.TransformPoint(p);}
+    }
+    public float MaximumBulkFraction
+    {
+        get {GetBounds(out var low,out var high);var s=transform.lossyScale;float space=(high.x-low.x)*(high.y-low.y)*(high.z-low.z)*Mathf.Abs(s.x*s.y*s.z);return space>0?Mathf.Clamp01(SlotCapacity(chunkSize)*chunkSize*chunkSize*chunkSize/space):0;}
+    }
+    public float RetainedFraction
+    {
+        get
+        {
+            float up=Vector3.Dot(transform.TransformDirection(openingAxis.normalized),Vector3.up);
+            float angle=Mathf.Acos(Mathf.Clamp(up,-1,1))*Mathf.Rad2Deg;
+            float adhesion=LoadAdhesion;
+            return Mathf.Clamp01(1-Mathf.Max(0,angle-12-adhesion*12)/(76+adhesion*20));
+        }
+    }
+    bool SideSpilling => CapturedCount>0 && FillFraction>RetainedFraction+0.03f &&
+        Vector3.Dot(transform.TransformDirection(openingAxis.normalized),Vector3.up)>0.2f;
     public float FillFraction => Mathf.Clamp01(captured.Count / (float)Mathf.Max(1, SlotCapacity(chunkSize)));
-    public float PourStrength => !IsDumping ? 0 : Mathf.Lerp(0.2f, 1f, Mathf.InverseLerp(
+    public float PourStrength => !IsDumping ? 0 : Mathf.Max(SideSpilling ? Mathf.Clamp01((FillFraction-RetainedFraction)*3) : 0,Mathf.Lerp(0.2f, 1f, Mathf.InverseLerp(
         Mathf.Cos(dumpAngle * Mathf.Deg2Rad), Mathf.Cos((dumpAngle + 20f) * Mathf.Deg2Rad),
-        Vector3.Dot(transform.TransformDirection(openingAxis.normalized), Vector3.up)));
+        Vector3.Dot(transform.TransformDirection(openingAxis.normalized), Vector3.up))));
     public bool IsDumping
     {
         get
@@ -67,6 +92,7 @@ public class BucketInside : MonoBehaviour
                 pourPoint.position.y <= system.SurfaceY(pourPoint.position) + 0.04f) return false;
             float up = Vector3.Dot(transform.TransformDirection(openingAxis.normalized), Vector3.up);
             float lipDown = Vector3.Dot(transform.TransformDirection(lipAxis.normalized), Vector3.down);
+            if(SideSpilling)return true;
             return up < Mathf.Cos(dumpAngle * Mathf.Deg2Rad) && (lipDown > 0.5f || up < -0.2f);
         }
     }
@@ -159,6 +185,8 @@ public class BucketInside : MonoBehaviour
     public void Capture(DirtBlock block)
     {
         if (!block || captured.Contains(block)) return;
+        if(captured.Count>=SlotCapacity(chunkSize))
+        {block.DropAsSoil(PourPosition(Random.Range(-0.4f,0.4f)),Vector3.down*0.1f);return;}
         captured.Add(block);
         block.Hold(this);
         RefreshFill();
@@ -178,6 +206,15 @@ public class BucketInside : MonoBehaviour
     {
         if (!volume) volume = GetComponent<BoxCollider>();
         Vector3 lip = pourPoint ? pourPoint.position : transform.TransformPoint(volume.center + Vector3.Scale(volume.size * 0.5f, lipAxis.normalized));
+        if(SideSpilling)
+        {
+            var gravity=transform.InverseTransformDirection(Vector3.down);
+            var edge=volume.center;
+            if(Mathf.Abs(gravity.x)>Mathf.Abs(gravity.y)){edge.x+=Mathf.Sign(gravity.x)*volume.size.x*0.55f;edge.y+=across*volume.size.y;}
+            else {edge.y+=Mathf.Sign(gravity.y)*volume.size.y*0.55f;edge.x+=across*volume.size.x;}
+            edge.z+=volume.size.z*0.45f;
+            return transform.TransformPoint(edge);
+        }
         return lip + transform.right * (Mathf.Clamp(across, -0.5f, 0.5f) * volume.size.x * Mathf.Abs(transform.lossyScale.x) * 0.85f)
             + transform.TransformDirection(openingAxis.normalized) * 0.015f + transform.TransformDirection(lipAxis.normalized) * 0.025f;
     }
@@ -193,10 +230,17 @@ public class BucketInside : MonoBehaviour
         if (angle > 180) angle -= 360;
         Vector3 angular = angle == 0 || axis.sqrMagnitude < 0.001f ? Vector3.zero :
             Vector3.ClampMagnitude(axis * (angle * Mathf.Deg2Rad / dt), 4f);
+        var localGravity=transform.InverseTransformDirection(Vector3.down);
+        float normal=Mathf.Max(0.15f,-localGravity.z);
+        var slope=Vector2.ClampMagnitude(new Vector2(localGravity.x,localGravity.y)/normal,2);
+        float friction=Mathf.Lerp(0.45f,1.2f,LoadAdhesion);
+        Vector2 target=slope.magnitude>friction?slope.normalized*Mathf.Min(0.3f,(slope.magnitude-friction)*0.2f):LoadOffset*0.98f;
+        LoadOffset=Vector2.SmoothDamp(LoadOffset,target,ref slideVelocity,Mathf.Lerp(0.18f,0.6f,LoadAdhesion),Mathf.Infinity,dt);
+        LoadSlope=Vector2.Lerp(LoadSlope,slope*0.35f,1-Mathf.Exp(-dt*5/(1+LoadAdhesion*3)));
         lastPosition = transform.position;
         lastRotation = transform.rotation;
         captured.RemoveAll(b => !b || !b.gameObject.activeSelf);
-        if (fill) fill.Step(dt);
+        if (fill) {fill.SetDistribution(LoadOffset,LoadSlope);fill.Step(dt);}
         if (!IsDumping || captured.Count == 0)
         {
             flowRate = Mathf.MoveTowards(flowRate, 0, flowAcceleration * dt);
@@ -206,7 +250,7 @@ public class BucketInside : MonoBehaviour
         if (!sand) { sand = gameObject.AddComponent<SandFlow>(); sand.Initialize(this); }
         float strength = PourStrength;
         // Soil accelerates into a bounded, irregular stream; sudden tipping cannot empty the load in one frame.
-        float desired = maxPourRate * strength * Mathf.Lerp(0.75f, 1f, FillFraction);
+        float desired = maxPourRate * strength * Mathf.Lerp(0.75f, 1f, FillFraction) * Mathf.Lerp(1,0.5f,LoadAdhesion);
         flowRate = Mathf.MoveTowards(flowRate, desired, flowAcceleration * dt);
         releaseCredit += flowRate * dt;
         flowClock += dt;
@@ -229,7 +273,7 @@ public class BucketInside : MonoBehaviour
             Vector3 launch = inherited + sliding + transform.right * Random.Range(-0.04f, 0.04f);
             Vector3 release = PourPosition(Random.Range(-0.45f,0.45f));
             block.DropAsSoil(release, launch);
-            sand.EmitLoose(release, launch, block.Volume * finesFraction);
+            sand.EmitLoose(release, launch, block.Volume * finesFraction * Mathf.Lerp(1,0.2f,LoadAdhesion));
         }
         releaseCredit -= count;
         RefreshFill(true);

@@ -19,6 +19,8 @@ public class ExcavatorGrounding : MonoBehaviour
     [Range(1,15)] public float maxHydraulicTilt = 10;
     [Min(1)] public float hydraulicTiltSpeed = 12;
     public float HydraulicLoad { get; private set; }
+    public ExcavatorMass massModel;
+    int sampleCount=12;
     public LayerMask groundLayers = ~0;
     public bool Ready { get; private set; }
     public bool IsGrounded { get; private set; }
@@ -26,13 +28,13 @@ public class ExcavatorGrounding : MonoBehaviour
     public float VerticalSpeed { get; private set; }
     public Vector3 SupportNormal { get; private set; } = Vector3.up;
     public Vector3 Pivot => chassis ? chassis.TransformPoint(localCenter) : transform.position;
-    public float DriveFactor => IsGrounded ? Mathf.Lerp(1, 0.45f, Mathf.Clamp01(Slope / maxDriveSlope)) : 0;
+    public float DriveFactor => IsGrounded ? Mathf.Lerp(1, 0.45f, Mathf.Clamp01(Slope / maxDriveSlope)) * (massModel ? Mathf.Lerp(0.4f,1,massModel.Stability) : 1) : 0;
     Vector3 forward = Vector3.forward, localCenter;
-    readonly Vector3[] contacts = new Vector3[12];
-    readonly Vector3[] feet = new Vector3[12];
-    readonly Vector3[] surface = new Vector3[12];
-    readonly bool[] found = new bool[12];
-    readonly bool[] near = new bool[12];
+    readonly Vector3[] contacts = new Vector3[13];
+    readonly Vector3[] feet = new Vector3[13];
+    readonly Vector3[] surface = new Vector3[13];
+    readonly bool[] found = new bool[13];
+    readonly bool[] near = new bool[13];
     readonly RaycastHit[] hits = new RaycastHit[32];
 
     void Awake() { if (chassis) Initialize(chassis, Vector3.forward); }
@@ -44,8 +46,10 @@ public class ExcavatorGrounding : MonoBehaviour
         forward = forwardAxis.sqrMagnitude > 0.01f ? forwardAxis.normalized : Vector3.forward;
         if (!TrackPoints(leftTrack, 0) || !TrackPoints(rightTrack, 6)) return false;
         localCenter = Vector3.zero;
-        foreach (var point in contacts) localCenter += point / contacts.Length;
+        for(int i=0;i<12;i++)localCenter+=contacts[i]/12f;
+        if(!massModel)massModel=GetComponent<ExcavatorMass>();
         Ready = true;
+        if(massModel)massModel.Step();
         Gather(chassis.position, chassis.rotation);
         if (Plane(false, out var normal))
         {
@@ -61,19 +65,36 @@ public class ExcavatorGrounding : MonoBehaviour
     bool TrackPoints(Transform track, int offset)
     {
         var filter = track.GetComponent<MeshFilter>();
-        if (!filter || !filter.sharedMesh) return false;
-        var meshBounds = filter.sharedMesh.bounds;
-        var frame = chassis.worldToLocalMatrix * track.localToWorldMatrix;
-        var bounds = new Bounds(frame.MultiplyPoint3x4(meshBounds.center), Vector3.zero);
-        for (int x = -1; x <= 1; x += 2)
-        for (int y = -1; y <= 1; y += 2)
-        for (int z = -1; z <= 1; z += 2)
-            bounds.Encapsulate(frame.MultiplyPoint3x4(meshBounds.center + Vector3.Scale(meshBounds.extents, new Vector3(x, y, z))));
+        Bounds bounds;
+        if(filter && filter.sharedMesh)bounds=MeshBounds(filter);
+        else
+        {
+            // Authored chain paths replace the original solid track meshes in Level 1.
+            var chain=track.GetComponent<TrackChain>();
+            var shoe=chain && chain.linkPrefab?chain.linkPrefab.GetComponentInChildren<MeshFilter>(true):null;
+            if(!chain || chain.path==null || chain.path.Length<3 || !shoe || !shoe.sharedMesh)return false;
+            bounds=new Bounds(chassis.InverseTransformPoint(chain.path[0].position),Vector3.zero);
+            foreach(var point in chain.path){if(!point)return false;bounds.Encapsulate(chassis.InverseTransformPoint(point.position));}
+            var shoeBounds=MeshBounds(shoe);var template=chassis.InverseTransformPoint(chain.linkPrefab.position);
+            var min=bounds.min;var max=bounds.max;
+            min.x+=shoeBounds.min.x-template.x;max.x+=shoeBounds.max.x-template.x;
+            float halfHeight=Mathf.Max(Mathf.Abs(shoeBounds.min.y-template.y),Mathf.Abs(shoeBounds.max.y-template.y));
+            min.y-=halfHeight;max.y+=halfHeight;
+            bounds.SetMinMax(min,max);
+        }
         for (int side = 0; side < 2; side++)
         for (int row = 0; row < 3; row++)
             contacts[offset + side * 3 + row] = new Vector3(Mathf.Lerp(bounds.min.x, bounds.max.x, side == 0 ? 0.15f : 0.85f),
                 bounds.min.y, Mathf.Lerp(bounds.min.z, bounds.max.z, 0.12f + row * 0.38f));
         return bounds.size.x > 0 && bounds.size.z > 0;
+    }
+    Bounds MeshBounds(MeshFilter filter)
+    {
+        var b=filter.sharedMesh.bounds;var frame=chassis.worldToLocalMatrix*filter.transform.localToWorldMatrix;
+        var bounds=new Bounds(frame.MultiplyPoint3x4(b.center),Vector3.zero);
+        for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
+            bounds.Encapsulate(frame.MultiplyPoint3x4(b.center+Vector3.Scale(b.extents,new Vector3(x,y,z))));
+        return bounds;
     }
     bool Ground(Vector3 foot, out float y)
     {
@@ -98,7 +119,9 @@ public class ExcavatorGrounding : MonoBehaviour
     }
     void Gather(Vector3 position, Quaternion rotation)
     {
-        for (int i = 0; i < contacts.Length; i++)
+        sampleCount=massModel && massModel.BladeSupported?13:12;
+        if(sampleCount==13)contacts[12]=chassis.InverseTransformPoint(massModel.BladePoint);
+        for (int i = 0; i < sampleCount; i++)
         {
             feet[i] = position + rotation * Vector3.Scale(contacts[i], chassis.lossyScale);
             found[i] = Ground(feet[i], out float height);
@@ -110,15 +133,16 @@ public class ExcavatorGrounding : MonoBehaviour
     {
         normal = Vector3.up;
         int left = 0, right = 0;
-        for (int i = 0; i < contacts.Length; i++) if (found[i] && (!onlyNear || near[i])) { if (i < 6) left++; else right++; }
+        for (int i = 0; i < sampleCount; i++) if (found[i] && (!onlyNear || near[i])) { if (i < 6) left++; else if(i<12) right++; }
         if (left < 2 || right < 2 || left + right < 6) return false;
         var center = Vector3.zero;
-        foreach (var point in feet) center += point / feet.Length;
+        if(massModel)center=massModel.CenterOfMass;
+        else for(int i=0;i<12;i++)center+=feet[i]/12f;
         float minForward = float.PositiveInfinity, maxForward = float.NegativeInfinity;
         float minSide = float.PositiveInfinity, maxSide = float.NegativeInfinity;
         var ahead = Vector3.ProjectOnPlane(chassis.forward, Vector3.up).normalized;
         var side = Vector3.Cross(Vector3.up, ahead);
-        for (int i = 0; i < 12; i++) if (found[i] && (!onlyNear || near[i]))
+        for (int i = 0; i < sampleCount; i++) if (found[i] && (!onlyNear || near[i]))
         {
             float f = Vector3.Dot(feet[i] - center, ahead), s = Vector3.Dot(feet[i] - center, side);
             minForward = Mathf.Min(minForward, f); maxForward = Mathf.Max(maxForward, f);
@@ -127,9 +151,9 @@ public class ExcavatorGrounding : MonoBehaviour
         // Keep the center of the machine inside its supported footprint, with room to brake at an edge.
         if (minForward > -stabilityMargin || maxForward < stabilityMargin || minSide > -stabilityMargin || maxSide < stabilityMargin) return false;
         float lowest = float.PositiveInfinity; bool success = false;
-        for (int a = 0; a < 10; a++)
-        for (int b = a + 1; b < 11; b++)
-        for (int c = b + 1; c < 12; c++)
+        for (int a = 0; a < sampleCount-2; a++)
+        for (int b = a + 1; b < sampleCount-1; b++)
+        for (int c = b + 1; c < sampleCount; c++)
         {
             if (!found[a] || !found[b] || !found[c] || (onlyNear && (!near[a] || !near[b] || !near[c]))) continue;
             var p = surface[a]; var u = surface[b] - p; var v = surface[c] - p;
@@ -143,7 +167,7 @@ public class ExcavatorGrounding : MonoBehaviour
             float height = p.y - (n.x * (center.x - p.x) + n.z * (center.z - p.z)) / n.y;
             if (height >= lowest) continue;
             bool clear = true;
-            for (int i = 0; i < 12; i++)
+            for (int i = 0; i < sampleCount; i++)
                 if (found[i] && surface[i].y > p.y - (n.x * (surface[i].x - p.x) + n.z * (surface[i].z - p.z)) / n.y + 0.005f)
                 { clear = false; break; }
             if (clear) { lowest = height; normal = n; success = true; }
@@ -160,7 +184,7 @@ public class ExcavatorGrounding : MonoBehaviour
     float Height(Quaternion rotation)
     {
         float y = float.NegativeInfinity;
-        for (int i = 0; i < 12; i++) if (found[i])
+        for (int i = 0; i < sampleCount; i++) if (found[i])
             y = Mathf.Max(y, surface[i].y + groundClearance - (rotation * Vector3.Scale(contacts[i], chassis.lossyScale)).y);
         return y;
     }
@@ -193,7 +217,7 @@ public class ExcavatorGrounding : MonoBehaviour
         SupportNormal = stable ? normal : chassis.up;
         Slope = Vector3.Angle(SupportNormal, Vector3.up);
         float gap = float.PositiveInfinity;
-        for (int i = 0; i < 12; i++) if (found[i]) gap = Mathf.Min(gap, Mathf.Abs(feet[i].y - surface[i].y));
+        for (int i = 0; i < sampleCount; i++) if (found[i]) gap = Mathf.Min(gap, Mathf.Abs(feet[i].y - surface[i].y));
         IsGrounded = stable && gap <= 0.04f && Slope <= maxDriveSlope + 0.1f;
     }
     public bool TryMovePose(Vector3 position, Quaternion heading, float dt, out Vector3 fittedPosition, out Quaternion fittedRotation)

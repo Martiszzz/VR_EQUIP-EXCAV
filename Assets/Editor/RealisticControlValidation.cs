@@ -33,6 +33,7 @@ public static class RealisticControlValidation
             EngineAudioValidation.Check();
             TerrainDriveValidation.Check();
             ExcavatorPhysicsValidation.Check();
+            AdvancedSoilValidation.Check();
             Debug.Log("REALISTIC CONTROLS PASS: restart, idle power, track lever limits, thumbstick, ground contact, extended digging and conserved pushing.");
             EditorApplication.Exit(0);
         }

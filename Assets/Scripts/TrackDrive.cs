@@ -24,11 +24,26 @@ public class TrackDrive : MonoBehaviour
     float leftCmd, rightCmd;                          // kiekvieno vikšro valdomas greitis
     float velocity, yawVelocity;
     ExcavatorBody.Probe probe;
+    ExcavatorHydraulics circuit;
+    public float LeftSlip {get;private set;}
+    public float RightSlip {get;private set;}
+    public float RequestedFlow => !Ignition.EngineRunning || !leftLever || !rightLever ? 0 : (Mathf.Abs(leftLever.Forward)+Mathf.Abs(rightLever.Forward))*0.5f;
+    float Traction(Vector3 point,float command,float dt)
+    {
+        var s=DigSystem.I;
+        if(!s || !grounding || s.terrain!=grounding.terrain || !s.ContainsTerrainPoint(point))return 0;
+        var soil=s.SoilAt(new Vector3(point.x,s.SurfaceY(point),point.z));
+        float slope=Mathf.Tan(grounding.Slope*Mathf.Deg2Rad);
+        float pressure=grounding.massModel?grounding.massModel.TotalMass/1700:1;
+        float demand=Mathf.Abs(command)/Mathf.Max(0.1f,moveSpeed)*0.2f + grounding.HydraulicLoad*0.45f+slope;
+        return Mathf.Clamp((demand*pressure-soil.friction*0.55f)/Mathf.Max(0.1f,soil.friction),0,0.85f);
+    }
 
     void Awake()
     {
         if (!grounding && excavator) grounding = excavator.GetComponent<ExcavatorGrounding>();
         if (grounding) grounding.Initialize(excavator, forwardAxis);
+        circuit=excavator?excavator.GetComponent<ExcavatorHydraulics>():null;
         if (excavator && blockByWorld) probe = ExcavatorBody.For(excavator).CreateProbe(excavator);
     }
 
@@ -63,12 +78,17 @@ public class TrackDrive : MonoBehaviour
         }
         if (!leftLever || !rightLever) return;
 
-        float t = (throttle ? throttle.Power : 1f) * (grounded ? grounding.DriveFactor : 1f);
+        Vector3 leftPoint=grounded?(grounding.SupportPoint(0)+grounding.SupportPoint(5))*0.5f:excavator.position;
+        Vector3 rightPoint=grounded?(grounding.SupportPoint(6)+grounding.SupportPoint(11))*0.5f:excavator.position;
+        float t = (throttle ? throttle.Power : 1f) * (grounded ? grounding.DriveFactor : 1f) * (circuit?circuit.FlowFactor:1);
         // kiekvienas vikšras seka tik savo svirtį
         leftCmd = Approach(leftCmd, Input(leftLever.Forward) * moveSpeed * t, dt);
         rightCmd = Approach(rightCmd, Input(rightLever.Forward) * moveSpeed * t, dt);
-        velocity = (leftCmd + rightCmd) * 0.5f;
-        yawVelocity = (leftCmd - rightCmd) / (2f * Mathf.Max(0.05f, trackHalfWidth)) * Mathf.Rad2Deg * turnMultiplier;
+        LeftSlip=Mathf.MoveTowards(LeftSlip,grounded?Traction(leftPoint,leftCmd,dt):0,dt*2);
+        RightSlip=Mathf.MoveTowards(RightSlip,grounded?Traction(rightPoint,rightCmd,dt):0,dt*2);
+        float leftGround=leftCmd*(1-LeftSlip),rightGround=rightCmd*(1-RightSlip);
+        velocity = (leftGround + rightGround) * 0.5f;
+        yawVelocity = (leftGround - rightGround) / (2f * Mathf.Max(0.05f, trackHalfWidth)) * Mathf.Rad2Deg * turnMultiplier;
 
         float distance = 0, turned = 0;
         bool forwardBlocked = false, yawBlocked = false;
@@ -94,12 +114,13 @@ public class TrackDrive : MonoBehaviour
         }
 
         // Atsimušus: nuimame tik užblokuotą judesio dalį, kitos dalies (pvz. posūkio) nenutraukiame.
-        if (forwardBlocked)
+        bool soilContact=grounded && DigSystem.I && DigSystem.I.terrain==grounding.terrain;
+        if (forwardBlocked && !soilContact)
         {
             float yawPart = (leftCmd - rightCmd) * 0.5f;
             leftCmd = yawPart; rightCmd = -yawPart;
         }
-        if (yawBlocked)
+        if (yawBlocked && !soilContact)
         {
             float forwardPart = (leftCmd + rightCmd) * 0.5f;
             leftCmd = rightCmd = forwardPart;
@@ -109,6 +130,24 @@ public class TrackDrive : MonoBehaviour
         float yawLinear = turned / dt * Mathf.Deg2Rad * trackHalfWidth;
         LeftSpeed = distance / dt + yawLinear;
         RightSpeed = distance / dt - yawLinear;
+        if(soilContact)
+        {
+            if(forwardBlocked || yawBlocked)
+            {
+                LeftSlip=Mathf.MoveTowards(LeftSlip,Mathf.Abs(leftCmd)>0.02f?0.9f:0,dt*3);
+                RightSlip=Mathf.MoveTowards(RightSlip,Mathf.Abs(rightCmd)>0.02f?0.9f:0,dt*3);
+            }
+            if(LeftSlip>0.01f)LeftSpeed=leftCmd;
+            if(RightSlip>0.01f)RightSpeed=rightCmd;
+            float pressure=grounding.massModel?grounding.massModel.TotalMass/1700:1;
+            for(int row=0;row<3;row++)
+            {
+                var leftFoot=(grounding.SupportPoint(row)+grounding.SupportPoint(row+3))*0.5f;
+                var rightFoot=(grounding.SupportPoint(row+6)+grounding.SupportPoint(row+9))*0.5f;
+                DigSystem.I.DisplaceTrack(leftFoot,excavator.forward,0.28f,distance/3,LeftSlip*Mathf.Abs(leftCmd)/3,grounding.massModel?grounding.massModel.PressureAt(leftFoot):pressure,dt);
+                DigSystem.I.DisplaceTrack(rightFoot,excavator.forward,0.28f,distance/3,RightSlip*Mathf.Abs(rightCmd)/3,grounding.massModel?grounding.massModel.PressureAt(rightFoot):pressure,dt);
+            }
+        }
     }
 
     bool Move(Vector3 position, Quaternion rotation, float dt, bool grounded)

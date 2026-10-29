@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
-public class DigSystem : MonoBehaviour
+public partial class DigSystem : MonoBehaviour
 {
     public static DigSystem I;
     public Terrain terrain;
@@ -20,7 +20,7 @@ public class DigSystem : MonoBehaviour
     void FixedUpdate()
     {
         terrainSyncClock += Time.fixedDeltaTime;
-        if (terrainSyncClock >= 0.08f) { FlushTerrainChanges(); terrainSyncClock = 0; }
+        if (terrainSyncClock >= 0.08f) { StepSoil(terrainSyncClock); FlushTerrainChanges(); terrainSyncClock = 0; }
     }
     public void FlushTerrainChanges()
     {
@@ -61,9 +61,9 @@ public class DigSystem : MonoBehaviour
     public float PushAttachmentSoil(GroundedAttachment attachment, Vector3 motion, float maxDepth = 0.12f)
     {
         if(!attachment || !Ignition.EngineRunning || Vector3.ProjectOnPlane(motion,Vector3.up).magnitude < Mathf.Abs(motion.y)*0.25f) return 0;
-        return PushToolSoil(attachment.transform.localToWorldMatrix,attachment.WorkBounds,motion,maxDepth,true);
+        return PushToolSoil(attachment.transform.localToWorldMatrix,attachment.WorkBounds,motion,maxDepth,true,true);
     }
-    float PushToolSoil(Matrix4x4 frame, Bounds work, Vector3 motion, float maxDepth, bool grading)
+    float PushToolSoil(Matrix4x4 frame, Bounds work, Vector3 motion, float maxDepth, bool grading, bool blade = false)
     {
         var horizontal = Vector3.ProjectOnPlane(motion,Vector3.up);
         if(!terrain || maxDepth<=0 || horizontal.magnitude<=0.000001f) return 0;
@@ -117,14 +117,33 @@ public class DigSystem : MonoBehaviour
         float displaced = total * td.size.y * CellArea;
         if (displaced <= 0) return 0;
         // Deposit first and remove only what the destination accepts, preserving volume at terrain limits.
-        float deposited = grading ? FillLowSpots(destination, radius, bounds.min.y + 0.003f, displaced) : 0;
-        deposited += Add(destination + (grading ? direction * radius * 0.75f : Vector3.zero), radius, displaced - deposited, true);
+        float deposited;
+        if(blade)
+        {
+            // A growing windrow escapes around the two ends of the blade instead of teleporting far ahead.
+            var side=Vector3.Cross(Vector3.up,direction);
+            float pile=Mathf.Max(0,SurfaceY(bounds.center)-bounds.min.y);
+            float sideFraction=Mathf.Clamp(0.2f+pile*2,0.2f,0.6f);
+            float sideRadius=Mathf.Max(width*0.22f,Mathf.Max(cell.x,cell.z)*1.5f);
+            var edge=bounds.center+direction*(forwardExtent+sideRadius+Mathf.Max(cell.x,cell.z)*2);
+            deposited=Add(edge+side*(width*0.5f+sideRadius),sideRadius,displaced*sideFraction*0.5f,true);
+            deposited+=Add(edge-side*(width*0.5f+sideRadius),sideRadius,displaced*sideFraction*0.5f,true);
+            deposited+=FillLowSpots(destination,radius,bounds.min.y+0.003f,displaced-deposited);
+            deposited+=Add(destination+direction*radius*0.75f,radius,displaced-deposited,true);
+            LastBladeLoad=Mathf.Clamp01(displaced/Mathf.Max(0.0001f,horizontal.magnitude*width*0.15f));
+        }
+        else
+        {
+            deposited=grading?FillLowSpots(destination,radius,bounds.min.y+0.003f,displaced):0;
+            deposited+=Add(destination+(grading?direction*radius*0.75f:Vector3.zero),radius,displaced-deposited,true);
+        }
         if (deposited <= 0) return 0;
         float ratio = Mathf.Clamp01(deposited / displaced);
         for (int z = 0; z < heights.GetLength(0); z++)
         for (int x = 0; x < heights.GetLength(1); x++) heights[z, x] -= cuts[z, x] * ratio;
         td.SetHeightsDelayLOD(x0, z0, heights);
         terrainDirty = true;
+        Disturb(bounds.center,Mathf.Max(bounds.extents.x,bounds.extents.z)+Mathf.Max(cell.x,cell.z));
         PaintDumped(bounds.center, Mathf.Max(bounds.extents.x, bounds.extents.z), 1);
         return deposited;
     }
@@ -152,6 +171,7 @@ public class DigSystem : MonoBehaviour
             added += heights[z, x] - before;
         }
         td.SetHeightsDelayLOD(x0, z0, heights); terrainDirty = true;
+        Disturb(point,radius);
         PaintDumped(point, radius, 1);
         return Mathf.Min(volume, added * td.size.y * CellArea);
     }
@@ -313,7 +333,7 @@ public class DigSystem : MonoBehaviour
                 removed += before - heights[z, x];
             }
         td.SetHeights(x0, z0, heights);
-        if (removed > 0f) PaintDumped(point, radius * 1.1f, 1f);
+        if (removed > 0f) {Disturb(point,radius); PaintDumped(point, radius * 1.1f, 1f);}
         return removed * td.size.y * CellArea;
     }
     // Return the accepted volume so a saturated terrain never silently deletes soil.
@@ -354,10 +374,10 @@ public class DigSystem : MonoBehaviour
             terrainDirty = true;
         }
         else td.SetHeights(x0, z0, heights);
-        if (accepted > 0f) PaintDumped(point, radius * 1.3f, 0.5f);
+        if (accepted > 0f) {Disturb(point,radius); PaintDumped(point, radius * 1.3f, 0.5f);}
         return Mathf.Min(volume, accepted * td.size.y * CellArea);
     }
-    public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0)
+    public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0, SoilKind kind = SoilKind.Loam)
     {
         float amount = volume ?? BlockVolume;
         if (!CanSpawn || amount <= 0 || float.IsNaN(amount) || float.IsInfinity(amount)) return null;
@@ -366,7 +386,7 @@ public class DigSystem : MonoBehaviour
         block.transform.localScale = Vector3.one * Mathf.Pow(amount, 1f / 3f);
         block.transform.SetParent(transform, true);
         active.Add(block);
-        block.Activate(pos, this, amount, fractureLevel);
+        block.Activate(pos, this, amount, fractureLevel,kind);
         IgnoreSoilCollisions(block);
         return block;
     }

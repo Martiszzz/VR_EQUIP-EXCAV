@@ -163,7 +163,7 @@ public static class TerrainDriveValidation
             foreach(string level in new[]{"Level 1","Level 2"})
             {
                 string scene=System.IO.File.ReadAllText("Assets/Scenes/"+level+".unity");
-                Require(scene.Contains("grounding: {fileID: 2048484093}") && scene.Contains("leftTrack: {fileID: 346980961889796245}") && scene.Contains("rightTrack: {fileID: 1292206066633544386}") && scene.Contains("terrain: {fileID: 302056367}"),level+" missing terrain drive wiring");
+                Require(scene.Contains("grounding: {fileID: 2048484093}") && scene.Contains(level=="Level 1"?"leftTrack: {fileID: 1645427157}":"leftTrack: {fileID: 346980961889796245}") && scene.Contains(level=="Level 1"?"rightTrack: {fileID: 868185390}":"rightTrack: {fileID: 1292206066633544386}") && scene.Contains("terrain: {fileID: 302056367}"),level+" missing terrain drive wiring");
             }
             Debug.Log($"ACTUAL TRACK FOOTPRINT {length:F3} x {width:F3}m");
         }

@@ -21,6 +21,9 @@ public class PartDriver : MonoBehaviour
     float angle, angularVelocity;
     Quaternion restRotation;
     ExcavatorBody.Probe probe;
+    ExcavatorHydraulics circuit;
+    float cuttingResistance=1;
+    public float RequestedFlow => !Ignition.EngineRunning || !lever ? 0 : Mathf.Clamp01((Mathf.Abs(input==Axis.Forward?lever.Forward:lever.Side)-deadzone)/Mathf.Max(0.01f,1-deadzone));
     public float Angle => angle;
     public float AngularVelocity => angularVelocity;
     public float HydraulicLoad { get; private set; }
@@ -33,6 +36,7 @@ public class PartDriver : MonoBehaviour
             if (blockByTerrain && !target.GetComponent<GroundedAttachment>()) target.gameObject.AddComponent<GroundedAttachment>();
             if (blockByWorld || blockByTerrain) probe = ExcavatorBody.For(target).CreateProbe(target);
         }
+        circuit=target?target.GetComponentInParent<ExcavatorHydraulics>():null;
         angle = angularVelocity = 0;
     }
     void FixedUpdate() { Step(Time.fixedDeltaTime); }
@@ -43,7 +47,7 @@ public class PartDriver : MonoBehaviour
         float a = Mathf.Clamp01((Mathf.Abs(v) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
         v = Mathf.Sign(v) * Mathf.Pow(a, responseCurve) * (invert ? -1 : 1);
         HydraulicLoad = Mathf.MoveTowards(HydraulicLoad,0,deltaTime*1.5f);
-        float desired = v * speed * (throttle ? throttle.Power : 1f) * Mathf.Lerp(1,0.55f,HydraulicLoad);
+        float desired = v * speed * (throttle ? throttle.Power : 1f) * Mathf.Lerp(1,0.55f,HydraulicLoad) * (circuit ? circuit.FlowFactor*circuit.ForceFactor(target,cuttingResistance) : 1);
         float rate = Mathf.Abs(desired) < Mathf.Abs(angularVelocity) || desired * angularVelocity < 0 ? braking : acceleration;
         if (limit)
         {
@@ -84,6 +88,7 @@ public class PartDriver : MonoBehaviour
         // Dig along the actual tooth sweep before testing the remaining terrain contact.
         // Do not excavate through a solid obstacle such as the cab or a wall.
         if (after <= probe.Tolerance) HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(probe.WorkSoil(dt)/Mathf.Max(dt,0.001f)/0.012f));
+        cuttingResistance=probe.CuttingResistance;
         float groundAfter = probe.GroundDepth();
         if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         if(after<=probe.Tolerance && probe.ReactToGround(dt)) {HydraulicLoad=1;return true;}

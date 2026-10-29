@@ -4,6 +4,7 @@ public class DirtBlock : MonoBehaviour
 {
     public Rigidbody rb;
     public float Volume { get; private set; }
+    public SoilKind Kind {get;private set;}
     public bool IsHeld { get; private set; }
     public int FractureLevel { get; private set; }
     [Min(0.5f)] public float breakSpeed = 1.6f;
@@ -20,9 +21,9 @@ public class DirtBlock : MonoBehaviour
     float supportClock;
     bool supported;
 
-    public void Activate(Vector3 pos, DigSystem system, float volume, int fractureLevel = 0)
+    public void Activate(Vector3 pos, DigSystem system, float volume, int fractureLevel = 0, SoilKind kind = SoilKind.Loam)
     {
-        owner = system;
+        owner = system;Kind=kind;
         Volume = volume;
         FractureLevel = fractureLevel;
         if (!rb) rb = GetComponent<Rigidbody>();
@@ -47,7 +48,7 @@ public class DirtBlock : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.linearDamping = 0.15f;
         rb.angularDamping = 0.8f;
-        rb.mass = Mathf.Max(0.01f, volume * 1600f);
+        rb.mass = Mathf.Max(0.01f, volume * SoilProperties.For(Kind).density);
         SetColliders(true);
         IsHeld = false;
         calm = age = 0;
@@ -134,14 +135,14 @@ public class DirtBlock : MonoBehaviour
         {
             float angle = i * Mathf.PI * 2f / 3f;
             Vector3 radial = tangent * Mathf.Cos(angle) + bitangent * Mathf.Sin(angle);
-            var fragment = owner.Spawn(center + radial * size * 0.7f, childVolume, 1);
+            var fragment = owner.Spawn(center + radial * size * 0.7f, childVolume, 1,Kind);
             fragment.DropAsSoil(fragment.transform.position, inherited + radial * 0.12f + normal * 0.08f);
         }
         Volume = childVolume;
         FractureLevel = 1;
         var parentScale = transform.parent ? transform.parent.lossyScale : Vector3.one;
         transform.localScale = new Vector3(size / Mathf.Abs(parentScale.x), size / Mathf.Abs(parentScale.y), size / Mathf.Abs(parentScale.z));
-        rb.mass = Mathf.Max(0.01f, childVolume * 1600f);
+        rb.mass = Mathf.Max(0.01f, childVolume * SoilProperties.For(Kind).density);
         rb.position = center + tangent * size * 0.7f;
         rb.linearVelocity = inherited + tangent * 0.12f + normal * 0.08f;
         if (owner.bucket && owner.bucket.Sand) owner.bucket.Sand.EmitImpact(center, normal, 18);

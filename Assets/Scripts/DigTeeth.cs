@@ -9,11 +9,30 @@ public class DigTeeth : MonoBehaviour
     [Range(0.1f, 2f)] public float cutPerMeter = 0.6f;
     [Min(0.1f)] public float maxSweepDistance = 1f;
     [Range(0.02f, 0.3f)] public float maxPushDepth = 0.16f;
+    [Range(3,9)] public int toothCount = 5;
+    readonly Vector3[] toothStart=new Vector3[9];
+    bool toothSweepPrepared;
+    SoilKind carriedKind=SoilKind.Loam;
     Vector3 last;
+    public float LastResistance {get;private set;}
+    public void BeginToothSweep()
+    {
+        if(!tip || !DigSystem.I || !DigSystem.I.bucket)return;
+        for(int i=0;i<Mathf.Clamp(toothCount,3,9);i++)toothStart[i]=ToothPosition(i);
+        toothSweepPrepared=true;
+    }
+    public Vector3 ToothPosition(int index)
+    {
+        var bucket=DigSystem.I?DigSystem.I.bucket:null;
+        if(!bucket || !tip)return tip?tip.position:transform.position;
+        var box=bucket.GetComponent<BoxCollider>();
+        float width=box.size.x*Mathf.Abs(bucket.transform.lossyScale.x)*0.9f;
+        return tip.position+bucket.transform.right*((index/(float)(Mathf.Clamp(toothCount,3,9)-1)-0.5f)*width);
+    }
     float carry;
     public float PendingVolume => carry;
     public float LastWorkVolume { get; private set; }
-    public void ResetSweep() { if (tip) last = tip.position; }
+    public void ResetSweep() { if (tip) last = tip.position; toothSweepPrepared=false; }
     void OnEnable() { if (tip) last = tip.position; }
     void FixedUpdate()
     {
@@ -22,13 +41,13 @@ public class DigTeeth : MonoBehaviour
         var s = DigSystem.I;
         if (carry > 0 && s && s.bucket && s.bucket.IsDumping && s.CanSpawn)
         {
-            var clod = s.Spawn(s.bucket.PourPosition(0), carry);
+            var clod = s.Spawn(s.bucket.PourPosition(0), carry,kind:carriedKind);
             if (clod) { clod.DropAsSoil(clod.transform.position, Vector3.down * 0.1f); carry = 0; }
         }
     }
     public void Sweep(Vector3 start, Vector3 p, float dt, Vector3? bodyMotion = null, bool closingCurl = false)
     {
-        LastWorkVolume = 0;
+        LastWorkVolume = 0; LastResistance=0;
         if (!tip) return;
         last = p;
         var s = DigSystem.I;
@@ -46,23 +65,36 @@ public class DigTeeth : MonoBehaviour
             return;
         }
         if (distance < minSpeed * dt) return;
-        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / (radius * 0.5f)), 1, 8);
-        for (int i = 1; i <= steps && budget > 0f; i++)
+        int count=Mathf.Clamp(toothCount,3,9);
+        var box=s.bucket.GetComponent<BoxCollider>();
+        float width=box.size.x*Mathf.Abs(s.bucket.transform.lossyScale.x)*0.9f;
+        float toothRadius=Mathf.Min(radius,Mathf.Max(width/(count-1)*0.65f,0.015f));
+        for(int tooth=0;tooth<count && budget>0;tooth++)
         {
-            var point = Vector3.Lerp(start, p, i / (float)steps);
-            if (!s.ContainsTerrainPoint(point)) continue;
-            float penetration = s.SurfaceY(point) - point.y;
-            if (penetration <= 0.005f) continue;
-            float depth = Mathf.Min(penetration, maxDepthPerStep, distance / steps * cutPerMeter);
-            float removed = s.Dig(point, radius, depth, budget, point.y);
-            LastWorkVolume += removed;
-            carry += removed;
-            budget -= removed;
+            Vector3 end=ToothPosition(tooth);
+            Vector3 begin=toothSweepPrepared?toothStart[tooth]:end-(p-start);
+            float stroke=Vector3.Distance(begin,end);
+            int steps=Mathf.Clamp(Mathf.CeilToInt(stroke/Mathf.Max(toothRadius*0.5f,0.01f)),1,16);
+            for(int i=1;i<=steps && budget>0;i++)
+            {
+                var point=Vector3.Lerp(begin,end,i/(float)steps);
+                if(!s.ContainsTerrainPoint(point))continue;
+                float penetration=s.SurfaceY(point)-point.y;
+                if(penetration<=0.005f)continue;
+                var soil=s.SoilAt(point);carriedKind=s.KindAt(point);
+                float attack=Mathf.Lerp(0.65f,1,Mathf.Clamp01(Vector3.Dot(motion.normalized,s.bucket.transform.TransformDirection(s.bucket.lipAxis.normalized))));
+                float resistance=soil.resistance*(1+Mathf.Clamp01(penetration/0.25f))*1/attack;
+                LastResistance=Mathf.Max(LastResistance,resistance);
+                float depth=Mathf.Min(penetration,maxDepthPerStep,stroke/steps*cutPerMeter)/Mathf.Max(0.5f,resistance);
+                float removed=s.Dig(point,toothRadius,depth,budget,point.y);
+                LastWorkVolume+=removed;carry+=removed;budget-=removed;
+            }
         }
+        toothSweepPrepared=false;
         while (carry + s.BlockVolume * 0.0001f >= s.BlockVolume && s.CanSpawn)
         {
             if (!s.bucket.TryGetSpawnPosition(s.blockSize, out var position)) break;
-            var block = s.Spawn(position);
+            var block = s.Spawn(position,kind:carriedKind);
             if (!block) break;
             s.bucket.Capture(block);
             carry = Mathf.Max(0f, carry - s.BlockVolume);

@@ -42,6 +42,7 @@ public class ExcavatorBody : MonoBehaviour
         float nextRefresh = -1f;
         bool workingSoil;
 
+        public float CuttingResistance {get;private set;}=1;
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
@@ -57,6 +58,7 @@ public class ExcavatorBody : MonoBehaviour
             previousBodies.Clear();
             foreach (var tooth in teeth)
             {
+                tooth.BeginToothSweep();
                 previousRotations.Add(tooth.transform.rotation);
                 var bucket=DigSystem.I?DigSystem.I.bucket:null;
                 previousMouthUp.Add(bucket?Vector3.Dot(bucket.transform.TransformDirection(bucket.openingAxis.normalized),Vector3.up):0);
@@ -67,7 +69,7 @@ public class ExcavatorBody : MonoBehaviour
         public float WorkSoil(float dt)
         {
             workingSoil=true;
-            float moved=0;
+            float moved=0;CuttingResistance=1;
             for (int i = 0; i < teeth.Count; i++)
                 if (teeth[i].tip)
                 {
@@ -75,11 +77,16 @@ public class ExcavatorBody : MonoBehaviour
                     bool closing=bucket && part==teeth[i].transform && Vector3.Dot(bucket.transform.TransformDirection(bucket.openingAxis.normalized),Vector3.up)>previousMouthUp[i]+0.000001f && Quaternion.Angle(previousRotations[i],teeth[i].transform.rotation)>0.01f;
                     teeth[i].Sweep(previousTips[i],teeth[i].tip.position,dt,teeth[i].transform.position-previousBodies[i],closing);
                     moved+=teeth[i].LastWorkVolume;
+                    CuttingResistance=Mathf.Max(CuttingResistance,teeth[i].LastResistance);
                 }
             if(DigSystem.I && Ignition.EngineRunning)
                 for(int i=0;i<pushing.Count;i++) moved+=DigSystem.I.PushAttachmentSoil(pushing[i],pushing[i].transform.TransformPoint(pushing[i].WorkBounds.center)-previousBlades[i]);
             var grounding=body.GetComponent<ExcavatorGrounding>();
-            if(grounding)grounding.ReportHydraulicWork(moved,dt);
+            if(grounding)
+            {
+                float resistance=1;foreach(var tooth in teeth)resistance=Mathf.Max(resistance,tooth.LastResistance);
+                grounding.ReportHydraulicWork(moved*resistance,dt);
+            }
             return moved;
         }
         public bool ReactToGround(float dt)
