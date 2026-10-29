@@ -35,12 +35,14 @@ public static class TerrainDriveValidation
             Require(Vector3.Angle(body.up, normal)<0.5f, "Chassis does not follow compound slope");
             float before=body.position.y, start=body.position.z;
             for(int i=0;i<100;i++) drive.Step(0.02f);
+            Require(drive.LeftSpeed>0 && Mathf.Abs(drive.LeftSpeed-drive.RightSpeed)<0.001f,"Track chain speeds do not follow forward travel");
             Require(body.position.z-start>0.7f && body.position.y-before>0.07f, "Tracks do not climb terrain");
             drive.leftLever.Forward=drive.rightLever.Forward=0;
             for(int i=0;i<100;i++) drive.Step(0.02f);
             var pivot=grounding.Pivot; var heading=body.forward;
             drive.leftLever.Forward=1; drive.rightLever.Forward=-1;
             for(int i=0;i<100;i++) drive.Step(0.02f);
+            Require(drive.LeftSpeed>0 && drive.RightSpeed<0,"Track chain speeds do not follow differential steering");
             Require(Vector3.Angle(heading,body.forward)>15 && Vector2.Distance(new Vector2(pivot.x,pivot.z),new Vector2(grounding.Pivot.x,grounding.Pivot.z))<0.025f, "Slope turn drifts away from track center");
             Require(Vector3.Angle(body.up,normal)<0.5f, "Turning loses slope alignment");
             for(int i=0;i<12;i++) Require(grounding.SupportPoint(i).y>=ground.GetComponent<Terrain>().SampleHeight(grounding.SupportPoint(i))-0.005f,"Track penetrates terrain");
@@ -98,6 +100,8 @@ public static class TerrainDriveValidation
     }
     static void CheckObstacle(TrackDrive drive, ExcavatorGrounding grounding, Transform body, TerrainData data)
     {
+        drive.leftLever.Forward=drive.rightLever.Forward=0;
+        for(int i=0;i<100;i++) drive.Step(0.02f);
         Set(data,(x,z)=>2); body.SetPositionAndRotation(new Vector3(5008,2.512f,5008),Quaternion.identity);
         grounding.RefreshState(); drive.leftLever.Forward=drive.rightLever.Forward=1;
         var hull=body.gameObject.AddComponent<BoxCollider>(); hull.center=Vector3.zero; hull.size=new Vector3(1,0.6f,1);
@@ -107,6 +111,7 @@ public static class TerrainDriveValidation
             drive.blockByWorld=true;
             typeof(TrackDrive).GetMethod("Awake",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(drive,null);
             for(int i=0;i<150;i++) drive.Step(0.02f);
+            Require(Mathf.Abs(drive.LeftSpeed)+Mathf.Abs(drive.RightSpeed)<0.001f,"Blocked chain animation still reports travel");
             Require(body.position.z<5008.65f,"Chassis drives through a solid wall");
         }
         finally { UnityEngine.Object.DestroyImmediate(hull); UnityEngine.Object.DestroyImmediate(wall); }

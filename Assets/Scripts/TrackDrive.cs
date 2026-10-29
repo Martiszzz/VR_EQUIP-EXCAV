@@ -11,6 +11,9 @@ public class TrackDrive : MonoBehaviour
     [Min(0.01f)] public float acceleration = 0.6f;
     [Min(0.01f)] public float braking = 1.2f;
     [Min(1f)] public float turnAcceleration = 40f;
+    public float LeftSpeed { get; private set; }
+    public float RightSpeed { get; private set; }
+    public float trackHalfWidth = 0.5f;
     public Throttle throttle;
     public bool blockByWorld = true;
     public ExcavatorGrounding grounding;
@@ -31,6 +34,7 @@ public class TrackDrive : MonoBehaviour
     void FixedUpdate() { Step(Time.fixedDeltaTime); }
     public void Step(float dt)
     {
+        LeftSpeed = RightSpeed = 0;
         if (!excavator || dt <= 0) return;
         bool grounded = grounding && grounding.Ready;
         if (grounded)
@@ -49,6 +53,7 @@ public class TrackDrive : MonoBehaviour
         bool slowing = Mathf.Abs(desired) < Mathf.Abs(velocity) || desired * velocity < 0;
         velocity = Mathf.MoveTowards(velocity, desired, (slowing ? braking : acceleration) * dt);
         yawVelocity = Mathf.MoveTowards(yawVelocity, (l - r) * 0.5f * turnSpeed * t, turnAcceleration * dt);
+        float distance = 0, turned = 0;
         int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(Mathf.Abs(velocity * dt) / 0.03f, Mathf.Abs(yawVelocity * dt))), 1, 64);
         for (int i = 0; i < steps; i++)
         {
@@ -57,15 +62,22 @@ public class TrackDrive : MonoBehaviour
             {
                 Vector3 direction = excavator.TransformDirection(forwardAxis.normalized);
                 if (grounded) direction = Vector3.ProjectOnPlane(direction, grounding.SupportNormal).normalized;
-                if (!Move(excavator.position + direction * velocity * tick, excavator.rotation, tick, grounded)) velocity = 0;
+                Vector3 before = excavator.position;
+                if (Move(before + direction * velocity * tick, excavator.rotation, tick, grounded)) distance += Vector3.Dot(excavator.position - before, direction);
+                else velocity = 0;
             }
             if (Mathf.Abs(yawVelocity) > 0.0001f)
             {
                 Vector3 pivot = grounded ? grounding.Pivot : excavator.position;
                 Quaternion turn = Quaternion.AngleAxis(yawVelocity * tick, grounded ? excavator.up : Vector3.up);
-                if (!Move(pivot + turn * (excavator.position - pivot), turn * excavator.rotation, tick, grounded)) yawVelocity = 0;
+                if (Move(pivot + turn * (excavator.position - pivot), turn * excavator.rotation, tick, grounded)) turned += yawVelocity * tick;
+                else yawVelocity = 0;
             }
         }
+        // Drive the chain animation from accepted travel; blocked or airborne tracks report no travel.
+        float yawLinear = turned / dt * Mathf.Deg2Rad * trackHalfWidth;
+        LeftSpeed = distance / dt + yawLinear;
+        RightSpeed = distance / dt - yawLinear;
     }
     bool Move(Vector3 position, Quaternion rotation, float dt, bool grounded)
     {
