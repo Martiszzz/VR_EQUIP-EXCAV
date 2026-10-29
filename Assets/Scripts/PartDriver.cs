@@ -63,7 +63,7 @@ public class PartDriver : MonoBehaviour
             float candidate = Mathf.Lerp(from, next, i / (float)steps);
             Quaternion old = target.localRotation;
             if (probe != null) probe.BeginMove();
-            if (useWorldAxis) target.Rotate(Vector3.up, candidate - angle, Space.World);
+            if (useWorldAxis) target.Rotate(target.parent ? target.parent.TransformDirection(localAxis.normalized) : localAxis.normalized, candidate - angle, Space.World);
             else target.localRotation = restRotation * Quaternion.AngleAxis(candidate, localAxis.normalized);
             if (probe != null && Mathf.Abs(candidate - angle) > 0.0001f && !Accept(old, deltaTime / steps))
             {
