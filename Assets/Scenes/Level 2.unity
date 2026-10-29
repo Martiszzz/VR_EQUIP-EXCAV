@@ -2373,7 +2373,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8806329115733545878, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.105440974
+      value: -0.005440974
       objectReference: {fileID: 0}
     - target: {fileID: 8806329115733545878, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
       propertyPath: m_LocalRotation.w
@@ -3826,6 +3826,7 @@ GameObject:
   - component: {fileID: 2048484085}
   - component: {fileID: 2048484086}
   - component: {fileID: 2048484090}
+  - component: {fileID: 2048484091}
   m_Layer: 0
   m_Name: Controls
   m_TagString: Untagged
@@ -3845,6 +3846,34 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21a52b1382ad4069abbe3b14a7c900f1, type: 3}
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SeatedExcavatorControls
+--- !u!114 &2048484091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048484076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PartDriver
+  lever: {fileID: 7119197045842624717}
+  input: 1
+  target: {fileID: 3277301492896211551}
+  localAxis: {x: 1, y: 0, z: 0}
+  speed: 48
+  limit: 1
+  minAngle: -80
+  maxAngle: 85
+  deadzone: 0.12
+  acceleration: 95
+  braking: 130
+  responseCurve: 1.6
+  invert: 1
+  useWorldAxis: 0
+  throttle: {fileID: 9205069731105245680}
+  blockByWorld: 1
 --- !u!4 &2048484077
 Transform:
   m_ObjectHideFlags: 0
@@ -3886,7 +3915,7 @@ MonoBehaviour:
   acceleration: 45
   braking: 80
   responseCurve: 1.6
-  invert: 0
+  invert: 1
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
@@ -3934,13 +3963,13 @@ MonoBehaviour:
   input: 1
   target: {fileID: 5345148430944160316}
   localAxis: {x: 0, y: 0, z: 1}
-  speed: 10
+  speed: 40
   limit: 0
   minAngle: -360
   maxAngle: 360
   deadzone: 0.12
-  acceleration: 45
-  braking: 80
+  acceleration: 100
+  braking: 150
   responseCurve: 1.6
   invert: 0
   useWorldAxis: 1
@@ -3986,12 +4015,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PartDriver
-  lever: {fileID: 1112713853}
-  input: 0
+  lever: {fileID: 1170019396}
+  input: 1
   target: {fileID: 7653649128550395807}
   localAxis: {x: 0, y: 0, z: 1}
-  speed: 22
-  limit: 1
+  speed: 45
+  limit: 0
   minAngle: -360
   maxAngle: 360
   deadzone: 0.12
@@ -4043,8 +4072,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 91622c3d531e38842a95ec218b8a3e06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Claw
-  lever: {fileID: 7119197045842624717}
-  input: 1
+  lever: {fileID: 1170019396}
+  input: 0
   invert: 0
   throttle: {fileID: 9205069731105245680}
   jaws:
@@ -7982,12 +8011,13 @@ MonoBehaviour:
   Forward: 0
   Side: 0
   maxAngle: 25
-  returnToCenter: 0
+  returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 1, y: 0, z: 0}
 --- !u!114 &8477130755109987222
 MonoBehaviour:
