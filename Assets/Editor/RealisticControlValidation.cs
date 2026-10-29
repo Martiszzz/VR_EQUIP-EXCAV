@@ -31,6 +31,7 @@ public static class RealisticControlValidation
             BucketPushValidation.Check();
             RealBucketWorkValidation.Check();
             EngineAudioValidation.Check();
+            TerrainDriveValidation.Check();
             Debug.Log("REALISTIC CONTROLS PASS: restart, idle power, track lever limits, thumbstick, ground contact, extended digging and conserved pushing.");
             EditorApplication.Exit(0);
         }

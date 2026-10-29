@@ -11,20 +11,28 @@ public class TrackDrive : MonoBehaviour
     [Min(0.01f)] public float braking = 1.2f;
     [Min(0.05f)] public float trackHalfWidth = 0.5f;  // pusė atstumo tarp vikšrų (m)
     [Min(0f)] public float turnMultiplier = 1f;       // >1 daro posūkį greitesnį
+    // Seni laukai paliekami, kad nesulūžtų kiti skriptai (pvz. Editor validacijos); nebenaudojami.
+    [HideInInspector] public float turnSpeed = 25f;
+    [HideInInspector] public float turnAcceleration = 40f;
     public Throttle throttle;
     public bool blockByWorld = true;
+    public ExcavatorGrounding grounding;
 
-    public float LeftSpeed { get; private set; }
+    public float LeftSpeed { get; private set; }      // faktiškai nuvažiuotas vikšro greitis
     public float RightSpeed { get; private set; }
 
+    float leftCmd, rightCmd;                          // kiekvieno vikšro valdomas greitis
+    float velocity, yawVelocity;
     ExcavatorBody.Probe probe;
 
     void Awake()
     {
+        if (!grounding && excavator) grounding = excavator.GetComponent<ExcavatorGrounding>();
+        if (grounding) grounding.Initialize(excavator, forwardAxis);
         if (excavator && blockByWorld) probe = ExcavatorBody.For(excavator).CreateProbe(excavator);
     }
 
-    float Shape(float value)
+    float Input(float value)
     {
         if (!Ignition.EngineRunning) return 0;
         float a = Mathf.Clamp01((Mathf.Abs(value) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
@@ -37,41 +45,89 @@ public class TrackDrive : MonoBehaviour
         return Mathf.MoveTowards(current, target, (slowing ? braking : acceleration) * dt);
     }
 
-    void FixedUpdate()
+    void FixedUpdate() { Step(Time.fixedDeltaTime); }
+
+    public void Step(float dt)
     {
-        if (!leftLever || !rightLever || !excavator) return;
-        float dt = Time.fixedDeltaTime;
-        float t = throttle ? throttle.Power : 1f;
+        LeftSpeed = RightSpeed = 0;
+        if (!excavator || dt <= 0) return;
+        bool grounded = grounding && grounding.Ready;
+        if (grounded)
+        {
+            Vector3 old = excavator.position; Quaternion rotation = excavator.rotation;
+            if (probe != null) probe.BeginMove();
+            grounding.Settle(dt);
+            Accept(old, rotation, dt, false);
+            grounding.RefreshState();
+            if (!grounding.IsGrounded) { velocity = yawVelocity = leftCmd = rightCmd = 0; return; }
+        }
+        if (!leftLever || !rightLever) return;
 
+        float t = (throttle ? throttle.Power : 1f) * (grounded ? grounding.DriveFactor : 1f);
         // kiekvienas vikšras seka tik savo svirtį
-        LeftSpeed = Approach(LeftSpeed, Shape(leftLever.Forward) * moveSpeed * t, dt);
-        RightSpeed = Approach(RightSpeed, Shape(rightLever.Forward) * moveSpeed * t, dt);
+        leftCmd = Approach(leftCmd, Input(leftLever.Forward) * moveSpeed * t, dt);
+        rightCmd = Approach(rightCmd, Input(rightLever.Forward) * moveSpeed * t, dt);
+        velocity = (leftCmd + rightCmd) * 0.5f;
+        yawVelocity = (leftCmd - rightCmd) / (2f * Mathf.Max(0.05f, trackHalfWidth)) * Mathf.Rad2Deg * turnMultiplier;
 
-        float forward = (LeftSpeed + RightSpeed) * 0.5f;
-        float yaw = (LeftSpeed - RightSpeed) / (2f * trackHalfWidth) * Mathf.Rad2Deg * turnMultiplier;
+        float distance = 0, turned = 0;
+        bool forwardBlocked = false, yawBlocked = false;
+        int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(Mathf.Abs(velocity * dt) / 0.03f, Mathf.Abs(yawVelocity * dt))), 1, 64);
+        for (int i = 0; i < steps; i++)
+        {
+            float tick = dt / steps;
+            if (Mathf.Abs(velocity) > 0.0001f)
+            {
+                Vector3 direction = excavator.TransformDirection(forwardAxis.normalized);
+                if (grounded) direction = Vector3.ProjectOnPlane(direction, grounding.SupportNormal).normalized;
+                Vector3 before = excavator.position;
+                if (Move(before + direction * velocity * tick, excavator.rotation, tick, grounded)) distance += Vector3.Dot(excavator.position - before, direction);
+                else { velocity = 0; forwardBlocked = true; }
+            }
+            if (Mathf.Abs(yawVelocity) > 0.0001f)
+            {
+                Vector3 pivot = grounded ? grounding.Pivot : excavator.position;
+                Quaternion turn = Quaternion.AngleAxis(yawVelocity * tick, grounded ? excavator.up : Vector3.up);
+                if (Move(pivot + turn * (excavator.position - pivot), turn * excavator.rotation, tick, grounded)) turned += yawVelocity * tick;
+                else { yawVelocity = 0; yawBlocked = true; }
+            }
+        }
 
-        if (Mathf.Abs(forward) > 0.0001f)
+        // Atsimušus: nuimame tik užblokuotą judesio dalį, kitos dalies (pvz. posūkio) nenutraukiame.
+        if (forwardBlocked)
         {
-            Vector3 p = excavator.position; Quaternion q = excavator.rotation;
-            if (probe != null) probe.BeginMove();
-            excavator.Translate(forwardAxis.normalized * forward * dt, Space.Self);
-            if (!Accept(p, q)) LeftSpeed = RightSpeed = 0;
+            float yawPart = (leftCmd - rightCmd) * 0.5f;
+            leftCmd = yawPart; rightCmd = -yawPart;
         }
-        if (Mathf.Abs(yaw) > 0.0001f)
+        if (yawBlocked)
         {
-            Vector3 p = excavator.position; Quaternion q = excavator.rotation;
-            if (probe != null) probe.BeginMove();
-            excavator.Rotate(Vector3.up, yaw * dt, Space.World);
-            if (!Accept(p, q)) LeftSpeed = RightSpeed = 0;
+            float forwardPart = (leftCmd + rightCmd) * 0.5f;
+            leftCmd = rightCmd = forwardPart;
         }
+
+        // Grandinė animuojama pagal faktiškai priimtą judesį.
+        float yawLinear = turned / dt * Mathf.Deg2Rad * trackHalfWidth;
+        LeftSpeed = distance / dt + yawLinear;
+        RightSpeed = distance / dt - yawLinear;
     }
 
-    bool Accept(Vector3 oldPos, Quaternion oldRot)
+    bool Move(Vector3 position, Quaternion rotation, float dt, bool grounded)
+    {
+        Vector3 old = excavator.position; Quaternion before = excavator.rotation;
+        if (grounded && !grounding.TryMovePose(position, rotation, dt, out position, out rotation)) return false;
+        if (probe != null) probe.BeginMove();
+        excavator.SetPositionAndRotation(position, rotation);
+        bool accepted = Accept(old, before, dt);
+        if (grounded) grounding.RefreshState();
+        return accepted;
+    }
+
+    bool Accept(Vector3 oldPos, Quaternion oldRot, float dt, bool workSoil = true)
     {
         if (probe == null) return true;
         Physics.SyncTransforms();
         float after = probe.Depth(true);   // true: grindų kontaktai iš apačios ignoruojami
-        if (after <= probe.Tolerance) probe.WorkSoil(Time.fixedDeltaTime);
+        if (workSoil && after <= probe.Tolerance) probe.WorkSoil(dt);
         float groundAfter = probe.GroundDepth();
         if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         Vector3 p = excavator.position; Quaternion q = excavator.rotation;
