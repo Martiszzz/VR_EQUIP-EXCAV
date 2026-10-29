@@ -7379,7 +7379,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 12
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -7603,7 +7603,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 15
+  maxAngle: 10
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -7729,7 +7729,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 15
+  maxAngle: 10
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -8011,7 +8011,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 10
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -8273,7 +8273,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 12
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14

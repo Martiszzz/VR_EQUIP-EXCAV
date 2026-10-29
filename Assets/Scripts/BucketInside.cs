@@ -16,6 +16,32 @@ public class BucketInside : MonoBehaviour
     [Range(2, 8)] public int maxBatchSize = 6;
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
+    BoxCollider[] shell;
+    public bool GradingContact { get; set; }
+    public Bounds WorkBounds
+    {
+        get
+        {
+            if (!volume) volume = GetComponent<BoxCollider>();
+            var bounds = new Bounds(volume.center, volume.size);
+            if (pourPoint) bounds.Encapsulate(transform.InverseTransformPoint(pourPoint.position));
+            if (shell == null)
+            {
+                var teeth = GetComponentInParent<DigTeeth>();
+                shell = (teeth ? teeth.transform : transform).GetComponentsInChildren<BoxCollider>();
+            }
+            foreach (var wall in shell)
+            {
+                if (!wall || !wall.enabled || wall.isTrigger || wall.GetComponentInParent<DirtBlock>()) continue;
+                for (int x = -1; x <= 1; x += 2)
+                for (int y = -1; y <= 1; y += 2)
+                for (int z = -1; z <= 1; z += 2)
+                    bounds.Encapsulate(transform.InverseTransformPoint(wall.transform.TransformPoint(
+                        wall.center + Vector3.Scale(wall.size * 0.5f, new Vector3(x, y, z)))));
+            }
+            return bounds;
+        }
+    }
     Vector3 lastPosition, velocity;
     Quaternion lastRotation;
     bool motionInitialized;
@@ -47,8 +73,9 @@ public class BucketInside : MonoBehaviour
     public float GroundPenetration(DigSystem system)
     {
         if (!system || system.bucket != this || !system.terrain ||
-            (FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && Ignition.EngineRunning)) return 0;
+            (FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && !GradingContact && Ignition.EngineRunning)) return 0;
         if (!volume) volume = GetComponent<BoxCollider>();
+        var work = WorkBounds;
         float depth = 0;
         // Sample the oriented bucket volume, including the floor, sides and lip.
         // This also reads newly dug/deposited heights before the terrain collider syncs.
@@ -57,7 +84,7 @@ public class BucketInside : MonoBehaviour
         for (int z = -2; z <= 2; z++)
         {
             if (Mathf.Abs(x) < 2 && Mathf.Abs(y) < 2 && Mathf.Abs(z) < 2) continue;
-            var p = transform.TransformPoint(volume.center + Vector3.Scale(volume.size * 0.25f, new Vector3(x, y, z)));
+            var p = transform.TransformPoint(work.center + Vector3.Scale(work.size * 0.25f, new Vector3(x, y, z)));
             if (system.ContainsTerrainPoint(p)) depth = Mathf.Max(depth, system.SurfaceY(p) - p.y);
         }
         if (pourPoint && system.ContainsTerrainPoint(pourPoint.position))

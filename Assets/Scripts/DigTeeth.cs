@@ -15,19 +15,22 @@ public class DigTeeth : MonoBehaviour
     public void ResetSweep() { if (tip) last = tip.position; }
     void OnEnable() { if (tip) last = tip.position; }
     void FixedUpdate() { if (tip) Sweep(last, tip.position, Time.fixedDeltaTime); }
-    public void Sweep(Vector3 start, Vector3 p, float dt)
+    public void Sweep(Vector3 start, Vector3 p, float dt, Vector3? bodyMotion = null)
     {
         if (!tip) return;
         last = p;
         var s = DigSystem.I;
-        float distance = Vector3.Distance(start, p);
+        var motion = p - start;
+        if (bodyMotion.HasValue && motion.sqrMagnitude < bodyMotion.Value.sqrMagnitude * 0.1f) motion = bodyMotion.Value;
+        float distance = motion.magnitude;
         if (!s || !s.bucket || !Ignition.EngineRunning) return;
         if (distance <= 0.000001f || distance > maxSweepDistance) return;
+        s.bucket.GradingContact = IsBackDragging(s.bucket, motion);
         int slots = Mathf.Min(s.bucket.FreeSlots(s.blockSize), s.FreeBlocks);
         float budget = Mathf.Max(0f, slots * s.BlockVolume - carry);
-        if (budget <= 0f)
+        if (budget <= 0f || s.bucket.GradingContact)
         {
-            s.PushBucketSoil(s.bucket, p - start, maxPushDepth);
+            s.PushBucketSoil(s.bucket, motion, maxPushDepth);
             return;
         }
         if (distance < minSpeed * dt) return;
@@ -51,5 +54,16 @@ public class DigTeeth : MonoBehaviour
             s.bucket.Capture(block);
             carry = Mathf.Max(0f, carry - s.BlockVolume);
         }
+    }
+    public static bool IsBackDragging(BucketInside container, Vector3 motion)
+    {
+        if (!container || !container.pourPoint) return false;
+        var planar = Vector3.ProjectOnPlane(motion, Vector3.up);
+        var box = container.GetComponent<BoxCollider>();
+        var leading = Vector3.ProjectOnPlane(container.pourPoint.position - container.transform.TransformPoint(box.center), Vector3.up);
+        return planar.sqrMagnitude > 0.000000000001f && leading.sqrMagnitude > 0.00001f &&
+            Mathf.Abs(motion.y) < planar.magnitude &&
+            Vector3.Dot(container.transform.TransformDirection(container.openingAxis.normalized), Vector3.up) > 0.7f &&
+            Vector3.Dot(planar.normalized, leading.normalized) < -0.25f;
     }
 }

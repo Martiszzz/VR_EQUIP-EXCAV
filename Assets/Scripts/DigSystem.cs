@@ -55,18 +55,24 @@ public class DigSystem : MonoBehaviour
     {
         var horizontal = Vector3.ProjectOnPlane(motion, Vector3.up);
         if (!container || container != bucket || !terrain || maxDepth <= 0 ||
-            horizontal.magnitude <= 0.000001f || horizontal.magnitude < Mathf.Abs(motion.y)) return 0;
+            horizontal.magnitude <= 0.000001f) return 0;
         var box = container.GetComponent<BoxCollider>();
         if (!box) return 0;
         var td = terrain.terrainData;
         RememberSoilSurface();
         var origin = terrain.transform.position;
         var cell = td.heightmapScale;
-        var bounds = box.bounds;
+        var work = container.WorkBounds;
+        var frame = container.transform.localToWorldMatrix;
+        var bounds = new Bounds(frame.MultiplyPoint3x4(work.center), Vector3.zero);
+        for (int x = -1; x <= 1; x += 2)
+        for (int y = -1; y <= 1; y += 2)
+        for (int z = -1; z <= 1; z += 2)
+            bounds.Encapsulate(frame.MultiplyPoint3x4(work.center + Vector3.Scale(work.extents, new Vector3(x, y, z))));
         var direction = horizontal.normalized;
         float forwardExtent = Mathf.Abs(direction.x) * bounds.extents.x + Mathf.Abs(direction.z) * bounds.extents.z;
         float width = Mathf.Abs(direction.z) * bounds.size.x + Mathf.Abs(direction.x) * bounds.size.z;
-        float radius = Mathf.Max(width * 0.65f, Mathf.Max(cell.x, cell.z) * 2);
+        float radius = Mathf.Max(width * (container.GradingContact ? 0.9f : 0.65f), Mathf.Max(cell.x, cell.z) * 2);
         var destination = bounds.center + direction * (forwardExtent + radius * 2 + Mathf.Max(cell.x, cell.z) * 2);
         if (!ContainsTerrainPoint(destination)) return 0;
         int res = td.heightmapResolution;
@@ -76,10 +82,10 @@ public class DigSystem : MonoBehaviour
         int z1 = Mathf.Clamp(Mathf.CeilToInt((bounds.max.z - origin.z) / cell.z) + 1, 0, res - 1);
         var heights = td.GetHeights(x0, z0, x1 - x0 + 1, z1 - z0 + 1);
         var cuts = new float[z1 - z0 + 1, x1 - x0 + 1];
-        var inverse = box.transform.worldToLocalMatrix;
+        var inverse = frame.inverse;
         var up = inverse.MultiplyVector(Vector3.up);
-        var low = box.center - box.size * 0.5f;
-        var high = box.center + box.size * 0.5f;
+        var low = work.min;
+        var high = work.max;
         float total = 0;
         for (int z = 0; z < heights.GetLength(0); z++)
         for (int x = 0; x < heights.GetLength(1); x++)
@@ -104,7 +110,8 @@ public class DigSystem : MonoBehaviour
         float displaced = total * td.size.y * CellArea;
         if (displaced <= 0) return 0;
         // Deposit first and remove only what the destination accepts, preserving volume at terrain limits.
-        float deposited = Add(destination, radius, displaced, true);
+        float deposited = container.GradingContact ? FillLowSpots(destination, radius, bounds.min.y + 0.003f, displaced) : 0;
+        deposited += Add(destination + (container.GradingContact ? direction * radius * 0.75f : Vector3.zero), radius, displaced - deposited, true);
         if (deposited <= 0) return 0;
         float ratio = Mathf.Clamp01(deposited / displaced);
         for (int z = 0; z < heights.GetLength(0); z++)
@@ -113,6 +120,33 @@ public class DigSystem : MonoBehaviour
         terrainDirty = true;
         PaintDumped(bounds.center, Mathf.Max(bounds.extents.x, bounds.extents.z), 1);
         return deposited;
+    }
+    float FillLowSpots(Vector3 point, float radius, float gradeY, float volume)
+    {
+        if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
+            out float cx, out float cz, out float rx, out float rz)) return 0;
+        var td = terrain.terrainData;
+        var heights = td.GetHeights(x0, z0, w, h);
+        var needed = new float[h, w];
+        float target = Mathf.Clamp01((gradeY - terrain.transform.position.y) / td.size.y), sum = 0;
+        for (int z = 0; z < h; z++)
+        for (int x = 0; x < w; x++)
+        {
+            needed[z, x] = Mathf.Max(0, target - heights[z, x]) * Weight(x0, z0, x, z, cx, cz, rx, rz);
+            sum += needed[z, x];
+        }
+        if (sum <= 0) return 0;
+        float ratio = Mathf.Min(1, volume / (sum * td.size.y * CellArea)), added = 0;
+        for (int z = 0; z < h; z++)
+        for (int x = 0; x < w; x++)
+        {
+            float before = heights[z, x];
+            heights[z, x] += needed[z, x] * ratio;
+            added += heights[z, x] - before;
+        }
+        td.SetHeightsDelayLOD(x0, z0, heights); terrainDirty = true;
+        PaintDumped(point, radius, 1);
+        return Mathf.Min(volume, added * td.size.y * CellArea);
     }
     static bool BoxBottom(Vector3 point, Vector3 up, Vector3 low, Vector3 high, out float bottom)
     {

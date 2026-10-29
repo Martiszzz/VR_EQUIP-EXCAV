@@ -33,6 +33,7 @@ public class ExcavatorBody : MonoBehaviour
         readonly List<GroundedAttachment> grounded = new List<GroundedAttachment>();
         readonly List<DigTeeth> teeth = new List<DigTeeth>();
         readonly List<Vector3> previousTips = new List<Vector3>();
+        readonly List<Vector3> previousBodies = new List<Vector3>();
         float nextRefresh = -1f;
 
         public float Tolerance { get { return body.tolerance; } }
@@ -42,12 +43,17 @@ public class ExcavatorBody : MonoBehaviour
         {
             part.GetComponentsInChildren<DigTeeth>(false, teeth);
             previousTips.Clear();
-            foreach (var tooth in teeth) previousTips.Add(tooth.tip ? tooth.tip.position : Vector3.zero);
+            previousBodies.Clear();
+            foreach (var tooth in teeth)
+            {
+                previousTips.Add(tooth.tip ? tooth.tip.position : Vector3.zero);
+                previousBodies.Add(tooth.transform.position);
+            }
         }
         public void WorkSoil(float dt)
         {
             for (int i = 0; i < teeth.Count; i++)
-                if (teeth[i].tip) teeth[i].Sweep(previousTips[i], teeth[i].tip.position, dt);
+                if (teeth[i].tip) teeth[i].Sweep(previousTips[i], teeth[i].tip.position, dt, teeth[i].transform.position - previousBodies[i]);
         }
         public void CancelMove() { foreach (var tooth in teeth) tooth.ResetSweep(); }
 
