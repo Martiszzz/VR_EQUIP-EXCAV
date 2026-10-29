@@ -17,6 +17,7 @@ public class PartDriver : MonoBehaviour
     public bool invert, useWorldAxis;
     public Throttle throttle;
     public bool blockByWorld = true;
+    public bool blockByTerrain;
     float angle, angularVelocity;
     Quaternion restRotation;
     ExcavatorBody.Probe probe;
@@ -28,7 +29,8 @@ public class PartDriver : MonoBehaviour
         if (target)
         {
             restRotation = target.localRotation;
-            if (blockByWorld) probe = ExcavatorBody.For(target).CreateProbe(target);
+            if (blockByTerrain && !target.GetComponent<GroundedAttachment>()) target.gameObject.AddComponent<GroundedAttachment>();
+            if (blockByWorld || blockByTerrain) probe = ExcavatorBody.For(target).CreateProbe(target);
         }
         angle = angularVelocity = 0;
     }
@@ -39,7 +41,7 @@ public class PartDriver : MonoBehaviour
         float v = Ignition.EngineRunning ? (input == Axis.Forward ? lever.Forward : lever.Side) : 0;
         float a = Mathf.Clamp01((Mathf.Abs(v) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
         v = Mathf.Sign(v) * Mathf.Pow(a, responseCurve) * (invert ? -1 : 1);
-        float desired = v * speed * (throttle ? Mathf.Clamp01(throttle.Value) : 1f);
+        float desired = v * speed * (throttle ? throttle.Power : 1f);
         float rate = Mathf.Abs(desired) < Mathf.Abs(angularVelocity) || desired * angularVelocity < 0 ? braking : acceleration;
         if (limit)
         {
@@ -54,27 +56,42 @@ public class PartDriver : MonoBehaviour
             next = Mathf.Clamp(next, minAngle, maxAngle);
             if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
         }
-        Quaternion old = target.localRotation;
-        if (useWorldAxis) target.Rotate(Vector3.up, next - angle, Space.World);
-        else target.localRotation = restRotation * Quaternion.AngleAxis(next, localAxis.normalized);
-        if (probe != null && Mathf.Abs(next - angle) > 0.0001f && !Accept(old))
+        float from = angle;
+        int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(next - from) / 0.25f), 1, 64);
+        for (int i = 1; i <= steps; i++)
         {
-            angularVelocity = 0;   // atsimušė į kliūtį, kampas lieka senas
-            return;
+            float candidate = Mathf.Lerp(from, next, i / (float)steps);
+            Quaternion old = target.localRotation;
+            if (probe != null) probe.BeginMove();
+            if (useWorldAxis) target.Rotate(Vector3.up, candidate - angle, Space.World);
+            else target.localRotation = restRotation * Quaternion.AngleAxis(candidate, localAxis.normalized);
+            if (probe != null && Mathf.Abs(candidate - angle) > 0.0001f && !Accept(old, deltaTime / steps))
+            {
+                angularVelocity = 0;
+                return;
+            }
+            angle = candidate;
         }
         angle = limit ? next : Mathf.Repeat(next + 180f, 360f) - 180f;
     }
 
-    bool Accept(Quaternion old)
+    bool Accept(Quaternion old, float dt)
     {
         Physics.SyncTransforms();
         float after = probe.Depth(false);
-        if (after <= probe.Tolerance) return true;
+        // Dig along the actual tooth sweep before testing the remaining terrain contact.
+        // Do not excavate through a solid obstacle such as the cab or a wall.
+        if (after <= probe.Tolerance) probe.WorkSoil(dt);
+        float groundAfter = probe.GroundDepth();
+        if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         Quaternion moved = target.localRotation;
         target.localRotation = old;
         Physics.SyncTransforms();
         // jei judesys mažina persidengimą (dalis išlenda), leidžiam
-        if (after < probe.Depth(false) - 0.0005f) { target.localRotation = moved; return true; }
+        bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(false) - 0.0005f;
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
+        if (worldAllowed && groundAllowed) { target.localRotation = moved; return true; }
+        probe.CancelMove();
         return false;
     }
 }

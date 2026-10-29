@@ -31,7 +31,7 @@ public class TrackDrive : MonoBehaviour
     void FixedUpdate()
     {
         if (!leftLever || !rightLever || !excavator) return;
-        float t = throttle ? Mathf.Clamp01(throttle.Value) : 1f;
+        float t = throttle ? throttle.Power : 1f;
         float l = Input(leftLever.Forward), r = Input(rightLever.Forward);
         float desired = (l + r) * 0.5f * moveSpeed * t;
         bool slowing = Mathf.Abs(desired) < Mathf.Abs(velocity) || desired * velocity < 0;
@@ -44,12 +44,14 @@ public class TrackDrive : MonoBehaviour
         if (Mathf.Abs(velocity) > 0.0001f)
         {
             Vector3 p = excavator.position; Quaternion q = excavator.rotation;
+            if (probe != null) probe.BeginMove();
             excavator.Translate(forwardAxis.normalized * velocity * Time.fixedDeltaTime, Space.Self);
             if (!Accept(p, q)) velocity = 0;
         }
         if (Mathf.Abs(yawVelocity) > 0.0001f)
         {
             Vector3 p = excavator.position; Quaternion q = excavator.rotation;
+            if (probe != null) probe.BeginMove();
             excavator.Rotate(Vector3.up, yawVelocity * Time.fixedDeltaTime, Space.World);
             if (!Accept(p, q)) yawVelocity = 0;
         }
@@ -60,11 +62,16 @@ public class TrackDrive : MonoBehaviour
         if (probe == null) return true;
         Physics.SyncTransforms();
         float after = probe.Depth(true);   // true: grindų kontaktai iš apačios ignoruojami
-        if (after <= probe.Tolerance) return true;
+        if (after <= probe.Tolerance) probe.WorkSoil(Time.fixedDeltaTime);
+        float groundAfter = probe.GroundDepth();
+        if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
         Vector3 p = excavator.position; Quaternion q = excavator.rotation;
         excavator.SetPositionAndRotation(oldPos, oldRot);
         Physics.SyncTransforms();
-        if (after < probe.Depth(true) - 0.0005f) { excavator.SetPositionAndRotation(p, q); return true; }
+        bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(true) - 0.0005f;
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
+        if (worldAllowed && groundAllowed) { excavator.SetPositionAndRotation(p, q); return true; }
+        probe.CancelMove();
         return false;
     }
 }

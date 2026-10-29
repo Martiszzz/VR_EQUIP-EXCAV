@@ -29,11 +29,45 @@ public class ExcavatorBody : MonoBehaviour
         readonly ExcavatorBody body;
         readonly Transform part;
         readonly List<Collider> mine = new List<Collider>();
+        readonly List<BucketInside> buckets = new List<BucketInside>();
+        readonly List<GroundedAttachment> grounded = new List<GroundedAttachment>();
+        readonly List<DigTeeth> teeth = new List<DigTeeth>();
+        readonly List<Vector3> previousTips = new List<Vector3>();
+        readonly List<Vector3> previousBodies = new List<Vector3>();
         float nextRefresh = -1f;
 
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
+        public void BeginMove()
+        {
+            part.GetComponentsInChildren<DigTeeth>(false, teeth);
+            previousTips.Clear();
+            previousBodies.Clear();
+            foreach (var tooth in teeth)
+            {
+                previousTips.Add(tooth.tip ? tooth.tip.position : Vector3.zero);
+                previousBodies.Add(tooth.transform.position);
+            }
+        }
+        public void WorkSoil(float dt)
+        {
+            for (int i = 0; i < teeth.Count; i++)
+                if (teeth[i].tip) teeth[i].Sweep(previousTips[i], teeth[i].tip.position, dt, teeth[i].transform.position - previousBodies[i]);
+        }
+        public void CancelMove() { foreach (var tooth in teeth) tooth.ResetSweep(); }
+
+        public float GroundDepth()
+        {
+            // Bucket contents change during digging, so check capacity on every proposed move.
+            part.GetComponentsInChildren<BucketInside>(false, buckets);
+            float depth = 0;
+            foreach (var bucket in buckets) depth = Mathf.Max(depth, bucket.GroundPenetration(DigSystem.I));
+            part.GetComponentsInChildren<GroundedAttachment>(false, grounded);
+            var terrain = DigSystem.I ? DigSystem.I.terrain : Terrain.activeTerrain;
+            foreach (var attachment in grounded) depth = Mathf.Max(depth, attachment.Depth(terrain));
+            return depth;
+        }
 
         // Bendras persidengimo gylis tarp šios dalies (su visais vaikais) ir pasaulio kliūčių.
         // ignoreFloor: ignoruoja kontaktus iš apačios (vikšrai stovi ant grindų).

@@ -282,17 +282,17 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 104113719}
-  m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: 9.163}
-  m_LocalScale: {x: 0.001, y: 0.001, z: 0.001}
+  m_LocalRotation: {x: 0.5000001, y: -0.4999999, z: -0.5000001, w: 0.4999999}
+  m_LocalPosition: {x: -0.288, y: 0.08433104, z: 0.3420589}
+  m_LocalScale: {x: 0.0005, y: 0.0005, z: 0.0005}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1614469873}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 5345148430944160316}
   m_LocalEulerAnglesHint: {x: 0, y: -90, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0.376, y: 1.047}
+  m_AnchoredPosition: {x: -0.288, y: 0.08433104}
   m_SizeDelta: {x: 100, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &139297493
@@ -1893,6 +1893,9 @@ MonoBehaviour:
   invertSide: 0
   stemAxis: {x: 0, y: 1, z: 0}
   extraTips: []
+  gripLever: {fileID: 7119197045842624717}
+  controllerHand: 5
+  thumbDeadzone: 0.15
 --- !u!1 &1170019394
 GameObject:
   m_ObjectHideFlags: 0
@@ -1951,6 +1954,9 @@ MonoBehaviour:
   invertSide: 0
   stemAxis: {x: 0, y: 1, z: 0}
   extraTips: []
+  gripLever: {fileID: 9107482286238615050}
+  controllerHand: 4
+  thumbDeadzone: 0.15
 --- !u!1001 &1190861774
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2367,7 +2373,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8806329115733545878, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.105440974
+      value: -0.055440974
       objectReference: {fileID: 0}
     - target: {fileID: 8806329115733545878, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2465,7 +2471,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6598815579406187037, guid: 18ddb545287c546e19cc77dc9fbb2189, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3819,6 +3825,8 @@ GameObject:
   - component: {fileID: 2048484083}
   - component: {fileID: 2048484085}
   - component: {fileID: 2048484086}
+  - component: {fileID: 2048484090}
+  - component: {fileID: 2048484091}
   m_Layer: 0
   m_Name: Controls
   m_TagString: Untagged
@@ -3826,6 +3834,46 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &2048484090
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048484076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21a52b1382ad4069abbe3b14a7c900f1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SeatedExcavatorControls
+--- !u!114 &2048484091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048484076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PartDriver
+  lever: {fileID: 7119197045842624717}
+  input: 1
+  target: {fileID: 3277301492896211551}
+  localAxis: {x: 1, y: 0, z: 0}
+  speed: 48
+  limit: 1
+  minAngle: -80
+  maxAngle: 85
+  deadzone: 0.12
+  acceleration: 95
+  braking: 130
+  responseCurve: 1.6
+  invert: 1
+  useWorldAxis: 0
+  throttle: {fileID: 9205069731105245680}
+  blockByWorld: 1
 --- !u!4 &2048484077
 Transform:
   m_ObjectHideFlags: 0
@@ -3840,7 +3888,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 810399763}
-  - {fileID: 285939883213953068}
   m_Father: {fileID: 1113508163246883981}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &2048484079
@@ -3867,7 +3914,7 @@ MonoBehaviour:
   acceleration: 45
   braking: 80
   responseCurve: 1.6
-  invert: 0
+  invert: 1
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
@@ -3915,13 +3962,13 @@ MonoBehaviour:
   input: 1
   target: {fileID: 5345148430944160316}
   localAxis: {x: 0, y: 0, z: 1}
-  speed: 10
+  speed: 40
   limit: 0
   minAngle: -360
   maxAngle: 360
   deadzone: 0.12
-  acceleration: 45
-  braking: 80
+  acceleration: 100
+  braking: 150
   responseCurve: 1.6
   invert: 0
   useWorldAxis: 1
@@ -3967,12 +4014,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PartDriver
-  lever: {fileID: 1112713853}
-  input: 0
+  lever: {fileID: 1170019396}
+  input: 1
   target: {fileID: 7653649128550395807}
   localAxis: {x: 0, y: 0, z: 1}
-  speed: 22
-  limit: 1
+  speed: 45
+  limit: 0
   minAngle: -360
   maxAngle: 360
   deadzone: 0.12
@@ -4011,6 +4058,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 1
 --- !u!114 &2048484086
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4023,8 +4071,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 91622c3d531e38842a95ec218b8a3e06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Claw
-  lever: {fileID: 7119197045842624717}
-  input: 1
+  lever: {fileID: 1170019396}
+  input: 0
   invert: 0
   throttle: {fileID: 9205069731105245680}
   jaws:
@@ -4302,12 +4350,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 629391669760213654}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.65391326, y: -0.26906776, z: 0.26906776, w: 0.65391326}
-  m_LocalPosition: {x: -27.474993, y: 53.514957, z: 8.082962}
-  m_LocalScale: {x: 700, y: 699.9999, z: 699.9999}
+  m_LocalRotation: {x: 0.00000014676968, y: -0.38051927, z: -0.00000005604384, w: 0.924773}
+  m_LocalPosition: {x: 0.039250035, y: 0.090001486, z: 0.33870867}
+  m_LocalScale: {x: 7, y: 7, z: 7}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2048484077}
+  m_Father: {fileID: 5345148430944160316}
   m_LocalEulerAnglesHint: {x: 0, y: -44.732, z: 0}
 --- !u!1 &304038513419247159
 GameObject:
@@ -6507,6 +6555,8 @@ Transform:
   - {fileID: 1373153107}
   - {fileID: 2214903718955999429}
   - {fileID: 1723626096251907308}
+  - {fileID: 285939883213953068}
+  - {fileID: 104113724}
   m_Father: {fileID: 1125628318371602787}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &5557759784078270755
@@ -6983,6 +7033,7 @@ GameObject:
   - component: {fileID: 5345148430944160316}
   - component: {fileID: 4004335138592435000}
   - component: {fileID: 7002261973182256911}
+  - component: {fileID: 2048484092}
   m_Layer: 0
   m_Name: Head
   m_TagString: Untagged
@@ -7329,7 +7380,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 12
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -7553,13 +7604,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 10
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7474370918123358345
 MonoBehaviour:
@@ -7678,13 +7730,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 10
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7611461237230684709
 MonoBehaviour:
@@ -7959,14 +8012,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
-  returnToCenter: 0
+  maxAngle: 10
+  returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
-  stemAxis: {x: 1, y: 0, z: 0}
+  forwardOnly: 1
+  stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &8477130755109987222
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8220,7 +8274,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 12
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
@@ -8457,6 +8511,29 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.0106544625, y: 0.0044601723, z: 0.023104684}
   m_Center: {x: 0.000000099884346, y: -0.00000050070224, z: 0.0097406665}
+--- !u!114 &2048484092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6558627886208490360}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5194d6d1fe0436b9ac929038d2feb10, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorEngineAudio
+  startupClip: {fileID: 8300000, guid: b4f3324b8e2d4d3f99dbb24ed2319bc9, type: 3}
+  engineLoop: {fileID: 8300000, guid: f80fc09964f94266b1f114378e89f2ec, type: 3}
+  throttle: {fileID: 9205069731105245680}
+  engineOffset: {x: 0, y: 0.2, z: 0.05}
+  idlePitch: 0.9
+  fullPitch: 1.5
+  idleVolume: 0.35
+  fullVolume: 0.65
+  rpmResponse: 0.65
+  crossfade: 0.25
+  shutdownFade: 0.6
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -8486,5 +8563,4 @@ SceneRoots:
   - {fileID: 1847004709}
   - {fileID: 314244860}
   - {fileID: 2005687253}
-  - {fileID: 104113724}
   - {fileID: 779627514}
