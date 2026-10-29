@@ -8,6 +8,7 @@ public class DigTeeth : MonoBehaviour
     [Min(0f)] public float minSpeed = 0.02f;
     [Range(0.1f, 2f)] public float cutPerMeter = 0.6f;
     [Min(0.1f)] public float maxSweepDistance = 1f;
+    [Range(0.02f, 0.3f)] public float maxPushDepth = 0.16f;
     Vector3 last;
     float carry;
     public float PendingVolume => carry;
@@ -21,14 +22,15 @@ public class DigTeeth : MonoBehaviour
         var s = DigSystem.I;
         float distance = Vector3.Distance(start, p);
         if (!s || !s.bucket || !Ignition.EngineRunning) return;
-        if (distance < minSpeed * dt || distance > maxSweepDistance) return;
+        if (distance <= 0.000001f || distance > maxSweepDistance) return;
         int slots = Mathf.Min(s.bucket.FreeSlots(s.blockSize), s.FreeBlocks);
         float budget = Mathf.Max(0f, slots * s.BlockVolume - carry);
         if (budget <= 0f)
         {
-            s.PushSoil(p, p - start, radius, maxDepthPerStep);
+            s.PushBucketSoil(s.bucket, p - start, maxPushDepth);
             return;
         }
+        if (distance < minSpeed * dt) return;
         int steps = Mathf.Clamp(Mathf.CeilToInt(distance / (radius * 0.5f)), 1, 8);
         for (int i = 1; i <= steps && budget > 0f; i++)
         {

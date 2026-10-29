@@ -12,6 +12,8 @@ public class DigSystem : MonoBehaviour
     readonly Queue<DirtBlock> pool = new Queue<DirtBlock>();
     readonly HashSet<DirtBlock> active = new HashSet<DirtBlock>();
     TerrainData original, runtimeData;
+    TerrainData pushBaseData;
+    float[,] pushBaseHeights;
     bool terrainDirty;
     float terrainSyncClock;
     void FixedUpdate()
@@ -26,6 +28,13 @@ public class DigSystem : MonoBehaviour
         terrainDirty = false;
     }
     public float BlockVolume => blockSize * blockSize * blockSize;
+    void RememberSoilSurface()
+    {
+        var td = terrain.terrainData;
+        if (pushBaseData == td && pushBaseHeights != null) return;
+        pushBaseData = td;
+        pushBaseHeights = td.GetHeights(0, 0, td.heightmapResolution, td.heightmapResolution);
+    }
     // Redistribute a shallow strip ahead of a full bucket instead of deleting soil or teleporting through it.
     public float PushSoil(Vector3 point, Vector3 motion, float radius, float maxDepth)
     {
@@ -42,6 +51,87 @@ public class DigSystem : MonoBehaviour
         return deposited;
     }
     public int FreeBlocks => Mathf.Max(0, maxBlocks - active.Count);
+    public float PushBucketSoil(BucketInside container, Vector3 motion, float maxDepth)
+    {
+        var horizontal = Vector3.ProjectOnPlane(motion, Vector3.up);
+        if (!container || container != bucket || !terrain || maxDepth <= 0 ||
+            horizontal.magnitude <= 0.000001f || horizontal.magnitude < Mathf.Abs(motion.y)) return 0;
+        var box = container.GetComponent<BoxCollider>();
+        if (!box) return 0;
+        var td = terrain.terrainData;
+        RememberSoilSurface();
+        var origin = terrain.transform.position;
+        var cell = td.heightmapScale;
+        var bounds = box.bounds;
+        var direction = horizontal.normalized;
+        float forwardExtent = Mathf.Abs(direction.x) * bounds.extents.x + Mathf.Abs(direction.z) * bounds.extents.z;
+        float width = Mathf.Abs(direction.z) * bounds.size.x + Mathf.Abs(direction.x) * bounds.size.z;
+        float radius = Mathf.Max(width * 0.65f, Mathf.Max(cell.x, cell.z) * 2);
+        var destination = bounds.center + direction * (forwardExtent + radius * 2 + Mathf.Max(cell.x, cell.z) * 2);
+        if (!ContainsTerrainPoint(destination)) return 0;
+        int res = td.heightmapResolution;
+        int x0 = Mathf.Clamp(Mathf.FloorToInt((bounds.min.x - origin.x) / cell.x) - 1, 0, res - 1);
+        int z0 = Mathf.Clamp(Mathf.FloorToInt((bounds.min.z - origin.z) / cell.z) - 1, 0, res - 1);
+        int x1 = Mathf.Clamp(Mathf.CeilToInt((bounds.max.x - origin.x) / cell.x) + 1, 0, res - 1);
+        int z1 = Mathf.Clamp(Mathf.CeilToInt((bounds.max.z - origin.z) / cell.z) + 1, 0, res - 1);
+        var heights = td.GetHeights(x0, z0, x1 - x0 + 1, z1 - z0 + 1);
+        var cuts = new float[z1 - z0 + 1, x1 - x0 + 1];
+        var inverse = box.transform.worldToLocalMatrix;
+        var up = inverse.MultiplyVector(Vector3.up);
+        var low = box.center - box.size * 0.5f;
+        var high = box.center + box.size * 0.5f;
+        float total = 0;
+        for (int z = 0; z < heights.GetLength(0); z++)
+        for (int x = 0; x < heights.GetLength(1); x++)
+        {
+            float wx = origin.x + (x0 + x) * cell.x, wz = origin.z + (z0 + z) * cell.z;
+            float bottom = float.PositiveInfinity;
+            // Clear one interpolation cell around the tool so the heightmap cannot form an invisible rim.
+            for (int dz = -1; dz <= 1; dz++)
+            for (int dx = -1; dx <= 1; dx++)
+                if (BoxBottom(inverse.MultiplyPoint3x4(new Vector3(wx + dx * cell.x, 0, wz + dz * cell.z)), up, low, high, out float y))
+                    bottom = Mathf.Min(bottom, y);
+            if (float.IsPositiveInfinity(bottom)) continue;
+            float penetration = origin.y + heights[z, x] * td.size.y - bottom;
+            float originalSurface = origin.y + pushBaseHeights[z0 + z, x0 + x] * td.size.y;
+            // Deposited mounds remain pushable, while the underlying undisturbed soil stays protected.
+            if (penetration <= 0.003f || originalSurface - bottom > maxDepth ||
+                penetration > bounds.size.y + maxDepth) continue;
+            float floor = Mathf.Clamp01((bottom + 0.003f - origin.y) / td.size.y);
+            cuts[z, x] = Mathf.Max(0, heights[z, x] - floor);
+            total += cuts[z, x];
+        }
+        float displaced = total * td.size.y * CellArea;
+        if (displaced <= 0) return 0;
+        // Deposit first and remove only what the destination accepts, preserving volume at terrain limits.
+        float deposited = Add(destination, radius, displaced, true);
+        if (deposited <= 0) return 0;
+        float ratio = Mathf.Clamp01(deposited / displaced);
+        for (int z = 0; z < heights.GetLength(0); z++)
+        for (int x = 0; x < heights.GetLength(1); x++) heights[z, x] -= cuts[z, x] * ratio;
+        td.SetHeightsDelayLOD(x0, z0, heights);
+        terrainDirty = true;
+        PaintDumped(bounds.center, Mathf.Max(bounds.extents.x, bounds.extents.z), 1);
+        return deposited;
+    }
+    static bool BoxBottom(Vector3 point, Vector3 up, Vector3 low, Vector3 high, out float bottom)
+    {
+        bottom = float.NegativeInfinity;
+        float top = float.PositiveInfinity;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            if (Mathf.Abs(up[axis]) < 0.000001f)
+            {
+                if (point[axis] < low[axis] || point[axis] > high[axis]) return false;
+                continue;
+            }
+            float a = (low[axis] - point[axis]) / up[axis], b = (high[axis] - point[axis]) / up[axis];
+            bottom = Mathf.Max(bottom, Mathf.Min(a, b));
+            top = Mathf.Min(top, Mathf.Max(a, b));
+            if (bottom > top) return false;
+        }
+        return true;
+    }
     public bool CanSpawn => FreeBlocks > 0 && blockPrefab;
     float CellArea => terrain.terrainData.heightmapScale.x * terrain.terrainData.heightmapScale.z;
 
@@ -59,6 +149,7 @@ public class DigSystem : MonoBehaviour
         original = terrain.terrainData;
         runtimeData = Instantiate(original);
         terrain.terrainData = runtimeData;
+        RememberSoilSurface();
         var collider = terrain.GetComponent<TerrainCollider>();
         if (collider) collider.terrainData = runtimeData;
         ApplyEarthGround(runtimeData);
@@ -154,6 +245,7 @@ public class DigSystem : MonoBehaviour
         if (depth <= 0 || maxVolume <= 0 || !GetWindow(point, radius, out int x0, out int z0,
             out int w, out int h, out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
+        RememberSoilSurface();
         var heights = td.GetHeights(x0, z0, w, h);
         var cuts = new float[h, w];
         float sum = 0;
@@ -187,6 +279,7 @@ public class DigSystem : MonoBehaviour
         if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
+        RememberSoilSurface();
         var heights = td.GetHeights(x0, z0, w, h);
         float remaining = volume / (td.size.y * CellArea), accepted = 0;
         // Redistribute overflow among cells still below the maximum height.

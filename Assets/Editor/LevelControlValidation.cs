@@ -36,7 +36,8 @@ public static class LevelControlValidation
                     throttle.SendMessage("Update");
                     Require(Mathf.Abs(throttle.Value - configured) < 0.0001f, $"{level}: initial throttle is reset to zero");
                     Require(Quaternion.Angle(pose, throttle.transform.localRotation) < 0.01f, $"{level}: throttle jumps at startup");
-                    if (level == "Level 1") Require(throttle.Value > 0, "Level 1 starts with all hydraulic controls blocked by zero throttle");
+                    Ignition.EngineRunning = true;
+                    Require(throttle.Power > 0, "Idle throttle blocks all hydraulic controls");
                     // Level 2 intentionally starts at zero; emulate the player increasing its throttle.
                     if (throttle.Value == 0) { throttle.Value = 1; throttle.SendMessage("Awake"); }
                 }
