@@ -20,10 +20,12 @@ public class FingerStick : LeverBase
     float pitch, roll, pitchVelocity, rollVelocity;
     float grabPitch, grabRoll, startPitch, startRoll, lastTouch;
     bool touching;
+    bool initialized;
     XRPokeInteractor[] pokes;
     void Awake()
     {
         restLocalRot = transform.localRotation;
+        initialized = true;
         pokes = FindObjectsByType<XRPokeInteractor>(FindObjectsSortMode.None);
     }
     bool FindTip(out Vector3 tip)
@@ -48,7 +50,12 @@ public class FingerStick : LeverBase
     }
     void Update()
     {
-        if (!head) return;
+        // Gate every input path, including direct hand pokes, on the main handle grip.
+        if (!head || !gripLever || !gripLever.IsHeld)
+        {
+            ResetInput();
+            return;
+        }
         var device = InputDevices.GetDeviceAtXRNode(controllerHand);
         if (gripLever && gripLever.IsHeld && device.TryGetFeatureValue(CommonUsages.primary2DAxis, out var thumb))
         {
@@ -91,13 +98,23 @@ public class FingerStick : LeverBase
     }
     public void StepThumbstick(Vector2 input, bool gripped, float dt)
     {
+        if (!gripped) { ResetInput(); return; }
         float magnitude = Mathf.Clamp01(input.magnitude);
-        input = !gripped || magnitude <= thumbDeadzone ? Vector2.zero :
+        input = magnitude <= thumbDeadzone ? Vector2.zero :
             input.normalized * Mathf.InverseLerp(thumbDeadzone, 1, magnitude);
         pitch = Mathf.SmoothDamp(pitch, input.y * maxAngle, ref pitchVelocity, responseTime, followSpeed, dt);
         roll = Mathf.SmoothDamp(roll, input.x * maxAngle, ref rollVelocity, responseTime, followSpeed, dt);
         transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
         Forward = (invertForward ? -1 : 1) * pitch / maxAngle;
         Side = (invertSide ? -1 : 1) * roll / maxAngle;
+    }
+    void OnDisable() { ResetInput(); }
+    void ResetInput()
+    {
+        touching = false;
+        pitch = roll = pitchVelocity = rollVelocity = 0;
+        grabPitch = grabRoll = startPitch = startRoll = lastTouch = 0;
+        Forward = Side = 0;
+        if (initialized) transform.localRotation = restLocalRot;
     }
 }

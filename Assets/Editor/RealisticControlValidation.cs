@@ -78,8 +78,30 @@ public static class RealisticControlValidation
             Initialize(thumb);
             for (int i = 0; i < 100; i++) thumb.StepThumbstick(Vector2.right, true, 0.02f);
             Require(thumb.Side > 0.95f && Mathf.Abs(thumb.Forward) < 0.001f, "Held thumb joystick does not drive attachment");
-            for (int i = 0; i < 100; i++) thumb.StepThumbstick(Vector2.right, false, 0.02f);
-            Require(Mathf.Abs(thumb.Side) < 0.001f, "Thumb joystick keeps moving attachment after releasing main grip");
+            thumb.StepThumbstick(Vector2.right, false, 0.02f);
+            Require(thumb.Side == 0 && thumb.Forward == 0 && thumb.transform.localRotation == Quaternion.identity,
+                "Thumb joystick does not stop and center immediately after releasing main grip");
+            var tip = new GameObject("Ungrasped finger poke").transform;
+            tip.SetParent(thumbObject.transform, false);
+            thumb.head = tip;
+            thumb.extraTips = new[] { tip };
+            thumb.gripLever = lever;
+            var updateThumb = typeof(FingerStick).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic);
+            for (int i = 0; i < 5; i++)
+            {
+                tip.localPosition = new Vector3(i * 0.005f, 0.04f, 0.01f);
+                updateThumb.Invoke(thumb, null);
+                Require(!(bool)typeof(FingerStick).GetField("touching", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(thumb),
+                    "Direct touch is accepted without gripping the main handle");
+                Require(thumb.Forward == 0 && thumb.Side == 0 && thumb.transform.localRotation == Quaternion.identity,
+                    "Direct touch bypasses the main handle grip requirement");
+            }
+            thumb.gripLever = null;
+            updateThumb.Invoke(thumb, null);
+            Require(thumb.Side == 0 && thumb.Forward == 0, "Unassigned main handle enables thumb input");
+            thumb.StepThumbstick(Vector2.right, true, 0.5f);
+            typeof(FingerStick).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(thumb, null);
+            Require(thumb.Side == 0 && thumb.Forward == 0, "Disabled thumb joystick leaves stale attachment input");
             Debug.Log("CONTROL INPUT PASS: three engine cycles, wrist rotation, idle and stopped power, single-axis travel and held thumb input.");
         }
         finally { Ignition.EngineRunning = running; UnityEngine.Object.DestroyImmediate(go); }
