@@ -11,6 +11,9 @@ public class TrackDrive : MonoBehaviour
     [Min(0.01f)] public float acceleration = 0.6f;
     [Min(0.01f)] public float braking = 1.2f;
     [Min(1f)] public float turnAcceleration = 40f;
+    public float LeftSpeed { get; private set; }
+    public float RightSpeed { get; private set; }
+    public float trackHalfWidth = 0.5f;
     public Throttle throttle;
     public bool blockByWorld = true;
     float velocity, yawVelocity;
@@ -34,6 +37,9 @@ public class TrackDrive : MonoBehaviour
         bool slowing = Mathf.Abs(desired) < Mathf.Abs(velocity) || desired * velocity < 0;
         velocity = Mathf.MoveTowards(velocity, desired, (slowing ? braking : acceleration) * Time.fixedDeltaTime);
         yawVelocity = Mathf.MoveTowards(yawVelocity, (l - r) * 0.5f * turnSpeed * t, turnAcceleration * Time.fixedDeltaTime);
+        float yawLinear = yawVelocity * Mathf.Deg2Rad * trackHalfWidth;
+        LeftSpeed = velocity - yawLinear;
+        RightSpeed = velocity + yawLinear;
 
         if (Mathf.Abs(velocity) > 0.0001f)
         {
