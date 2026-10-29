@@ -23,6 +23,7 @@ public class PartDriver : MonoBehaviour
     ExcavatorBody.Probe probe;
     public float Angle => angle;
     public float AngularVelocity => angularVelocity;
+    public float HydraulicLoad { get; private set; }
     void Awake() { Initialize(); }
     public void Initialize()
     {
@@ -41,7 +42,8 @@ public class PartDriver : MonoBehaviour
         float v = Ignition.EngineRunning ? (input == Axis.Forward ? lever.Forward : lever.Side) : 0;
         float a = Mathf.Clamp01((Mathf.Abs(v) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
         v = Mathf.Sign(v) * Mathf.Pow(a, responseCurve) * (invert ? -1 : 1);
-        float desired = v * speed * (throttle ? throttle.Power : 1f);
+        HydraulicLoad = Mathf.MoveTowards(HydraulicLoad,0,deltaTime*1.5f);
+        float desired = v * speed * (throttle ? throttle.Power : 1f) * Mathf.Lerp(1,0.55f,HydraulicLoad);
         float rate = Mathf.Abs(desired) < Mathf.Abs(angularVelocity) || desired * angularVelocity < 0 ? braking : acceleration;
         if (limit)
         {
@@ -81,9 +83,11 @@ public class PartDriver : MonoBehaviour
         float after = probe.Depth(false);
         // Dig along the actual tooth sweep before testing the remaining terrain contact.
         // Do not excavate through a solid obstacle such as the cab or a wall.
-        if (after <= probe.Tolerance) probe.WorkSoil(dt);
+        if (after <= probe.Tolerance) HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(probe.WorkSoil(dt)/Mathf.Max(dt,0.001f)/0.012f));
         float groundAfter = probe.GroundDepth();
         if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
+        if(after<=probe.Tolerance && probe.ReactToGround(dt)) {HydraulicLoad=1;return true;}
+        if(groundAfter>probe.Tolerance)HydraulicLoad=1;
         Quaternion moved = target.localRotation;
         target.localRotation = old;
         Physics.SyncTransforms();

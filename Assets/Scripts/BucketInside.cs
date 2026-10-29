@@ -5,7 +5,7 @@ using UnityEngine;
 public class BucketInside : MonoBehaviour
 {
     public Transform spawnPoint, pourPoint;
-    [Min(1)] public int capacity = 60;
+    [Min(1)] public int capacity = 180;
     public Vector3 openingAxis = Vector3.forward, lipAxis = Vector3.up;
     [Range(30f, 150f)] public float dumpAngle = 42f;
     [Range(0f, 0.4f)] public float finesFraction = 0.12f;
@@ -52,6 +52,7 @@ public class BucketInside : MonoBehaviour
     public SandFlow Sand => sand;
     public BucketSoilFill Fill => fill;
     public int CapturedCount => captured.Count;
+    public float HeldVolume { get { float total = 0; foreach(var clod in captured) if(clod && clod.gameObject.activeSelf) total += clod.Volume; return total; } }
     public float FillFraction => Mathf.Clamp01(captured.Count / (float)Mathf.Max(1, SlotCapacity(chunkSize)));
     public float PourStrength => !IsDumping ? 0 : Mathf.Lerp(0.2f, 1f, Mathf.InverseLerp(
         Mathf.Cos(dumpAngle * Mathf.Deg2Rad), Mathf.Cos((dumpAngle + 20f) * Mathf.Deg2Rad),
@@ -70,10 +71,10 @@ public class BucketInside : MonoBehaviour
         }
     }
     public bool IsFull => FreeSlots(chunkSize) == 0;
-    public float GroundPenetration(DigSystem system)
+    public float GroundPenetration(DigSystem system, bool allowCutting = true)
     {
         if (!system || system.bucket != this || !system.terrain ||
-            (FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && !GradingContact && Ignition.EngineRunning)) return 0;
+            (allowCutting && FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && !GradingContact && Ignition.EngineRunning)) return 0;
         if (!volume) volume = GetComponent<BoxCollider>();
         var work = WorkBounds;
         float depth = 0;
@@ -109,9 +110,9 @@ public class BucketInside : MonoBehaviour
         GetBounds(out var low, out var high);
         var s = transform.lossyScale;
         Vector3 world = Vector3.Scale(high - low, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z)));
-        float spacing = Mathf.Max(0.001f, size) * 1.08f;
-        return Mathf.Min(capacity, Mathf.Max(0, Mathf.FloorToInt(world.x / spacing)) *
-            Mathf.Max(0, Mathf.FloorToInt(world.y / spacing)) * Mathf.Max(0, Mathf.FloorToInt(world.z / spacing)));
+        // Parcels account for bulk earth under a continuous fill mesh, rather than a grid of rigid cubes.
+        float unit=Mathf.Pow(Mathf.Max(0.001f,size),3);
+        return Mathf.Min(capacity,Mathf.Max(0,Mathf.FloorToInt(world.x*world.y*world.z*0.8f/unit)));
     }
     public int FreeSlots(float size)
     {
@@ -140,7 +141,7 @@ public class BucketInside : MonoBehaviour
         if (high.x < low.x || high.y < low.y || high.z < low.z) return false;
         var occupied = new Vector3[captured.Count];
         for (int i = 0; i < captured.Count; i++) occupied[i] = captured[i].transform.position;
-        float spacingSquared = size * size * 0.98f * 0.98f;
+        float spacingSquared = size * size * 0.6f * 0.6f;
         // Random packing, growing upwards from the floor. Expand the search if a lower layer is packed.
         float filled = (captured.Count + 1f) / Mathf.Max(1, SlotCapacity(size));
         float top = Mathf.Clamp(bottom + (high.z + radius.z - bottom) * filled - radius.z, low.z, high.z);
@@ -226,8 +227,9 @@ public class BucketInside : MonoBehaviour
             Vector3 sliding = transform.TransformDirection(lipAxis.normalized) * Mathf.Lerp(0.04f, 0.15f, strength);
             Vector3 inherited = velocity + Vector3.Cross(angular, block.transform.position - transform.position);
             Vector3 launch = inherited + sliding + transform.right * Random.Range(-0.04f, 0.04f);
-            block.DropAsSoil(block.transform.position, launch);
-            sand.EmitLoose(block.transform.position, launch, block.Volume * finesFraction);
+            Vector3 release = PourPosition(Random.Range(-0.45f,0.45f));
+            block.DropAsSoil(release, launch);
+            sand.EmitLoose(release, launch, block.Volume * finesFraction);
         }
         releaseCredit -= count;
         RefreshFill(true);

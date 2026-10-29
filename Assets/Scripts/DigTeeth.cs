@@ -12,11 +12,23 @@ public class DigTeeth : MonoBehaviour
     Vector3 last;
     float carry;
     public float PendingVolume => carry;
+    public float LastWorkVolume { get; private set; }
     public void ResetSweep() { if (tip) last = tip.position; }
     void OnEnable() { if (tip) last = tip.position; }
-    void FixedUpdate() { if (tip) Sweep(last, tip.position, Time.fixedDeltaTime); }
-    public void Sweep(Vector3 start, Vector3 p, float dt, Vector3? bodyMotion = null)
+    void FixedUpdate()
     {
+        // Only commanded attachment/chassis sweeps excavate; gravity and tracking corrections must not scoop.
+        ResetSweep();
+        var s = DigSystem.I;
+        if (carry > 0 && s && s.bucket && s.bucket.IsDumping && s.CanSpawn)
+        {
+            var clod = s.Spawn(s.bucket.PourPosition(0), carry);
+            if (clod) { clod.DropAsSoil(clod.transform.position, Vector3.down * 0.1f); carry = 0; }
+        }
+    }
+    public void Sweep(Vector3 start, Vector3 p, float dt, Vector3? bodyMotion = null, bool closingCurl = false)
+    {
+        LastWorkVolume = 0;
         if (!tip) return;
         last = p;
         var s = DigSystem.I;
@@ -25,12 +37,12 @@ public class DigTeeth : MonoBehaviour
         float distance = motion.magnitude;
         if (!s || !s.bucket || !Ignition.EngineRunning) return;
         if (distance <= 0.000001f || distance > maxSweepDistance) return;
-        s.bucket.GradingContact = IsBackDragging(s.bucket, motion);
+        s.bucket.GradingContact = !closingCurl && (!CanCut(s.bucket, motion) || IsBackDragging(s.bucket, motion));
         int slots = Mathf.Min(s.bucket.FreeSlots(s.blockSize), s.FreeBlocks);
         float budget = Mathf.Max(0f, slots * s.BlockVolume - carry);
         if (budget <= 0f || s.bucket.GradingContact)
         {
-            s.PushBucketSoil(s.bucket, motion, maxPushDepth);
+            LastWorkVolume = s.PushBucketSoil(s.bucket, motion, maxPushDepth);
             return;
         }
         if (distance < minSpeed * dt) return;
@@ -43,6 +55,7 @@ public class DigTeeth : MonoBehaviour
             if (penetration <= 0.005f) continue;
             float depth = Mathf.Min(penetration, maxDepthPerStep, distance / steps * cutPerMeter);
             float removed = s.Dig(point, radius, depth, budget, point.y);
+            LastWorkVolume += removed;
             carry += removed;
             budget -= removed;
         }
@@ -54,6 +67,20 @@ public class DigTeeth : MonoBehaviour
             s.bucket.Capture(block);
             carry = Mathf.Max(0f, carry - s.BlockVolume);
         }
+    }
+    public static bool CanCut(BucketInside container, Vector3 motion)
+    {
+        if (!container || !container.pourPoint || motion.sqrMagnitude < 1e-12f) return false;
+        var box = container.GetComponent<BoxCollider>();
+        var leading = Vector3.ProjectOnPlane(container.pourPoint.position-container.transform.TransformPoint(box.center),Vector3.up);
+        var horizontal = Vector3.ProjectOnPlane(motion,Vector3.up);
+        if (leading.sqrMagnitude>1e-8f && Vector3.Dot(horizontal,leading.normalized)>motion.magnitude*0.15f) return true;
+        var b=container.WorkBounds; float bottom=float.PositiveInfinity;
+        for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
+            bottom=Mathf.Min(bottom,container.transform.TransformPoint(b.center+Vector3.Scale(b.extents,new Vector3(x,y,z))).y);
+        // A downward bite requires the teeth to be the lowest edge, rather than pressing the bucket floor.
+        return motion.y < -motion.magnitude*0.2f && container.pourPoint.position.y<=bottom+0.04f &&
+            Vector3.Dot(container.transform.TransformDirection(container.openingAxis.normalized),Vector3.up)<0.75f;
     }
     public static bool IsBackDragging(BucketInside container, Vector3 motion)
     {

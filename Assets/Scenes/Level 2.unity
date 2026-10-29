@@ -997,7 +997,7 @@ MonoBehaviour:
   blockPrefab: {fileID: 2230047633501843805, guid: 96994b9d6136d79429d58c7455455e87, type: 3}
   bucket: {fileID: 0}
   blockSize: 0.06
-  maxBlocks: 250
+  maxBlocks: 600
 --- !u!4 &568196566
 Transform:
   m_ObjectHideFlags: 0
@@ -4368,6 +4368,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1113508163246883981}
   - component: {fileID: 2048484093}
+  - component: {fileID: 2048484094}
   m_Layer: 0
   m_Name: Excav
   m_TagString: Untagged
@@ -8594,3 +8595,19 @@ MonoBehaviour:
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &2048484094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f2971ba07107454e981cf2500e217aae, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::TrackVisuals
+  drive: {fileID: 810399764}
+  leftTrack: {fileID: 346980961889796245}
+  rightTrack: {fileID: 1292206066633544386}
+  linksPerTrack: 48

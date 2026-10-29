@@ -14,7 +14,8 @@ public class DigSystem : MonoBehaviour
     TerrainData original, runtimeData;
     TerrainData pushBaseData;
     float[,] pushBaseHeights;
-    bool terrainDirty;
+    bool terrainDirty, paintDirty;
+    Vector2 paintMin, paintMax;
     float terrainSyncClock;
     void FixedUpdate()
     {
@@ -23,9 +24,10 @@ public class DigSystem : MonoBehaviour
     }
     public void FlushTerrainChanges()
     {
-        if (!terrainDirty || !terrain || !terrain.terrainData) return;
-        terrain.terrainData.SyncHeightmap();
+        if (!terrain || !terrain.terrainData) return;
+        if (terrainDirty) terrain.terrainData.SyncHeightmap();
         terrainDirty = false;
+        if (paintDirty) { PaintChangedSurface(); paintDirty = false; }
     }
     public float BlockVolume => blockSize * blockSize * blockSize;
     void RememberSoilSurface()
@@ -53,17 +55,22 @@ public class DigSystem : MonoBehaviour
     public int FreeBlocks => Mathf.Max(0, maxBlocks - active.Count);
     public float PushBucketSoil(BucketInside container, Vector3 motion, float maxDepth)
     {
-        var horizontal = Vector3.ProjectOnPlane(motion, Vector3.up);
-        if (!container || container != bucket || !terrain || maxDepth <= 0 ||
-            horizontal.magnitude <= 0.000001f) return 0;
-        var box = container.GetComponent<BoxCollider>();
-        if (!box) return 0;
+        if (!container || container != bucket) return 0;
+        return PushToolSoil(container.transform.localToWorldMatrix,container.WorkBounds,motion,maxDepth,container.GradingContact);
+    }
+    public float PushAttachmentSoil(GroundedAttachment attachment, Vector3 motion, float maxDepth = 0.12f)
+    {
+        if(!attachment || !Ignition.EngineRunning || Vector3.ProjectOnPlane(motion,Vector3.up).magnitude < Mathf.Abs(motion.y)*0.25f) return 0;
+        return PushToolSoil(attachment.transform.localToWorldMatrix,attachment.WorkBounds,motion,maxDepth,true);
+    }
+    float PushToolSoil(Matrix4x4 frame, Bounds work, Vector3 motion, float maxDepth, bool grading)
+    {
+        var horizontal = Vector3.ProjectOnPlane(motion,Vector3.up);
+        if(!terrain || maxDepth<=0 || horizontal.magnitude<=0.000001f) return 0;
         var td = terrain.terrainData;
         RememberSoilSurface();
         var origin = terrain.transform.position;
         var cell = td.heightmapScale;
-        var work = container.WorkBounds;
-        var frame = container.transform.localToWorldMatrix;
         var bounds = new Bounds(frame.MultiplyPoint3x4(work.center), Vector3.zero);
         for (int x = -1; x <= 1; x += 2)
         for (int y = -1; y <= 1; y += 2)
@@ -72,8 +79,8 @@ public class DigSystem : MonoBehaviour
         var direction = horizontal.normalized;
         float forwardExtent = Mathf.Abs(direction.x) * bounds.extents.x + Mathf.Abs(direction.z) * bounds.extents.z;
         float width = Mathf.Abs(direction.z) * bounds.size.x + Mathf.Abs(direction.x) * bounds.size.z;
-        float radius = Mathf.Max(width * (container.GradingContact ? 0.9f : 0.65f), Mathf.Max(cell.x, cell.z) * 2);
-        var destination = bounds.center + direction * (forwardExtent + radius * 2 + Mathf.Max(cell.x, cell.z) * 2);
+        float radius = Mathf.Max(width * (grading ? 0.45f : 0.65f), Mathf.Max(cell.x, cell.z) * 2);
+        var destination = bounds.center + direction * (forwardExtent + radius * (grading ? 1 : 2) + Mathf.Max(cell.x, cell.z) * 2);
         if (!ContainsTerrainPoint(destination)) return 0;
         int res = td.heightmapResolution;
         int x0 = Mathf.Clamp(Mathf.FloorToInt((bounds.min.x - origin.x) / cell.x) - 1, 0, res - 1);
@@ -110,8 +117,8 @@ public class DigSystem : MonoBehaviour
         float displaced = total * td.size.y * CellArea;
         if (displaced <= 0) return 0;
         // Deposit first and remove only what the destination accepts, preserving volume at terrain limits.
-        float deposited = container.GradingContact ? FillLowSpots(destination, radius, bounds.min.y + 0.003f, displaced) : 0;
-        deposited += Add(destination + (container.GradingContact ? direction * radius * 0.75f : Vector3.zero), radius, displaced - deposited, true);
+        float deposited = grading ? FillLowSpots(destination, radius, bounds.min.y + 0.003f, displaced) : 0;
+        deposited += Add(destination + (grading ? direction * radius * 0.75f : Vector3.zero), radius, displaced - deposited, true);
         if (deposited <= 0) return 0;
         float ratio = Mathf.Clamp01(deposited / displaced);
         for (int z = 0; z < heights.GetLength(0); z++)
@@ -205,6 +212,7 @@ public class DigSystem : MonoBehaviour
     static void ApplyEarthGround(TerrainData td)
     {
         td.terrainLayers = new[] { SoilClodVisual.GroundLayer, SoilClodVisual.DumpedLayer };
+        td.alphamapResolution = Mathf.Max(td.alphamapResolution,Mathf.Min(1024,td.heightmapResolution-1));
         int r = td.alphamapResolution;
         var alpha = new float[r, r, 2];
         for (int y = 0; y < r; y++)
@@ -215,29 +223,30 @@ public class DigSystem : MonoBehaviour
     // Užtepa tamsią žemę ten, kur supilta arba iškasta.
     void PaintDumped(Vector3 world, float radius, float strength)
     {
-        var td = terrain.terrainData;
-        if (td.alphamapLayers < 2) return;
-        int res = td.alphamapResolution;
-        Vector3 local = world - terrain.transform.position;
-        float cx = local.x / td.size.x * (res - 1), cz = local.z / td.size.z * (res - 1);
-        float rx = Mathf.Max(1.5f, radius / td.size.x * (res - 1));
-        float rz = Mathf.Max(1.5f, radius / td.size.z * (res - 1));
-        int x0 = Mathf.Max(0, Mathf.FloorToInt(cx - rx)), z0 = Mathf.Max(0, Mathf.FloorToInt(cz - rz));
-        int w = Mathf.Min(res - 1, Mathf.CeilToInt(cx + rx)) - x0 + 1;
-        int h = Mathf.Min(res - 1, Mathf.CeilToInt(cz + rz)) - z0 + 1;
-        if (w <= 0 || h <= 0) return;
-        var maps = td.GetAlphamaps(x0, z0, w, h);
-        for (int z = 0; z < h; z++)
-            for (int x = 0; x < w; x++)
-            {
-                float dx = (x0 + x - cx) / rx, dz = (z0 + z - cz) / rz;
-                float weight = Mathf.Max(0f, 1f - dx * dx - dz * dz);
-                if (weight <= 0f) continue;
-                float a = Mathf.Min(1f, maps[z, x, 1] + strength * weight);
-                maps[z, x, 1] = a;
-                maps[z, x, 0] = 1f - a;
-            }
-        td.SetAlphamaps(x0, z0, maps);
+        var min=new Vector2(world.x-radius,world.z-radius); var max=new Vector2(world.x+radius,world.z+radius);
+        if(!paintDirty) {paintMin=min;paintMax=max;}else{paintMin=Vector2.Min(paintMin,min);paintMax=Vector2.Max(paintMax,max);}
+        paintDirty=true;
+    }
+    void PaintChangedSurface()
+    {
+        var td=terrain.terrainData;
+        if(td.alphamapLayers!=2 || pushBaseHeights==null) return;
+        int r=td.alphamapResolution, hr=td.heightmapResolution; var origin=terrain.transform.position;
+        int x0=Mathf.Clamp(Mathf.FloorToInt((paintMin.x-origin.x)/td.size.x*r),0,r-1);
+        int z0=Mathf.Clamp(Mathf.FloorToInt((paintMin.y-origin.z)/td.size.z*r),0,r-1);
+        int x1=Mathf.Clamp(Mathf.CeilToInt((paintMax.x-origin.x)/td.size.x*r),0,r-1);
+        int z1=Mathf.Clamp(Mathf.CeilToInt((paintMax.y-origin.z)/td.size.z*r),0,r-1);
+        var maps=td.GetAlphamaps(x0,z0,x1-x0+1,z1-z0+1);
+        for(int z=0;z<maps.GetLength(0);z++)for(int x=0;x<maps.GetLength(1);x++)
+        {
+            float u=(x0+x+0.5f)/r,v=(z0+z+0.5f)/r;
+            float hx=u*(hr-1),hz=v*(hr-1);int ix=Mathf.Min(hr-2,(int)hx),iz=Mathf.Min(hr-2,(int)hz);
+            float original=Mathf.Lerp(Mathf.Lerp(pushBaseHeights[iz,ix],pushBaseHeights[iz,ix+1],hx-ix),Mathf.Lerp(pushBaseHeights[iz+1,ix],pushBaseHeights[iz+1,ix+1],hx-ix),hz-iz)*td.size.y;
+            float changed=Mathf.Abs(td.GetInterpolatedHeight(u,v)-original);
+            float dark=Mathf.SmoothStep(0,0.85f,Mathf.InverseLerp(0.003f,0.05f,changed));
+            maps[z,x,1]=dark; maps[z,x,0]=1-dark;
+        }
+        td.SetAlphamaps(x0,z0,maps);
     }
 
     public bool ContainsTerrainPoint(Vector3 point)

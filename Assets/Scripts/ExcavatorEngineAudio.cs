@@ -21,11 +21,14 @@ public class ExcavatorEngineAudio : MonoBehaviour
     AudioSource startupSource, loopSource;
     float remainingStart, startupGain, loopGain;
     bool commandedOn, loopStarted;
+    ExcavatorGrounding grounding;
+    float hydraulicLoad;
 
     void Awake() { Initialize(); }
     public void Initialize()
     {
         if (startupSource && loopSource) return;
+        grounding = GetComponentInParent<ExcavatorGrounding>();
         startupSource = CreateSource("Engine starting", false, startupClip);
         loopSource = CreateSource("Engine running", true, engineLoop);
         State = Phase.Off;
@@ -70,7 +73,8 @@ public class ExcavatorEngineAudio : MonoBehaviour
             startupGain = startupClip ? 1 - blend : 0;
             loopGain = Mathf.MoveTowards(loopGain, blend, dt / Mathf.Max(0.05f, crossfade));
             Rpm = Mathf.MoveTowards(Rpm, loopStarted ? Mathf.Clamp01(gas) : 0, dt / Mathf.Max(0.05f, rpmResponse));
-            loopSource.pitch = Mathf.Lerp(idlePitch, fullPitch, Rpm);
+            hydraulicLoad = Mathf.MoveTowards(hydraulicLoad,grounding ? grounding.HydraulicLoad : 0,dt*3);
+            loopSource.pitch = Mathf.Lerp(idlePitch, fullPitch, Rpm)*Mathf.Lerp(1,0.94f,hydraulicLoad);
             State = remainingStart > 0 ? Phase.Starting : Phase.Running;
         }
         else
@@ -84,7 +88,7 @@ public class ExcavatorEngineAudio : MonoBehaviour
             State = startupGain > 0 || loopGain > 0 ? Phase.Stopping : Phase.Off;
         }
         startupSource.volume = fullVolume * startupGain;
-        loopSource.volume = Mathf.Lerp(idleVolume, fullVolume, Rpm) * loopGain;
+        loopSource.volume = Mathf.Clamp01(Mathf.Lerp(idleVolume, fullVolume, Rpm) * loopGain * Mathf.Lerp(1,1.15f,hydraulicLoad));
         if (startupGain == 0) startupSource.Stop();
         if (State == Phase.Off) { loopSource.Stop(); loopStarted = false; }
     }
@@ -93,7 +97,7 @@ public class ExcavatorEngineAudio : MonoBehaviour
         if (startupSource) { startupSource.Stop(); startupSource.volume = 0; }
         if (loopSource) { loopSource.Stop(); loopSource.volume = 0; }
         commandedOn = loopStarted = false;
-        remainingStart = startupGain = loopGain = Rpm = 0;
+        remainingStart = startupGain = loopGain = Rpm = hydraulicLoad = 0;
         State = Phase.Off;
     }
 }

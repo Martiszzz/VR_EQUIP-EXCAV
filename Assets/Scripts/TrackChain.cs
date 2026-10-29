@@ -22,9 +22,9 @@ public class TrackChain : MonoBehaviour
 
     void Start() { Build(); }
 
-    void Build()
+    public void Build()
     {
-        if (path == null || path.Length < 3 || !linkPrefab) return;
+        if (links != null || path == null || path.Length < 3 || !linkPrefab || !drive) return;
 
         var pts = new Vector3[path.Length];
         centroid = Vector3.zero;
@@ -73,14 +73,16 @@ public class TrackChain : MonoBehaviour
         Place();
     }
 
-    void Update()
+    public void Step(float dt)
     {
         if (links == null || !drive) return;
         float speed = rightSide ? drive.RightSpeed : drive.LeftSpeed;
         float scale = Mathf.Max(0.0001f, transform.lossyScale.z);
-        offset += (invert ? -speed : speed) * Time.deltaTime / scale;
+        offset += (invert ? -speed : speed) * dt / scale;
         Place();
     }
+
+    void Update() { Step(Time.deltaTime); }
 
     void Place()
     {

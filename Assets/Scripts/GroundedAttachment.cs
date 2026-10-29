@@ -4,6 +4,25 @@ using UnityEngine;
 public class GroundedAttachment : MonoBehaviour
 {
     Collider[] contacts;
+    public Bounds WorkBounds
+    {
+        get
+        {
+            if(contacts==null)contacts=GetComponentsInChildren<Collider>();
+            var bounds=new Bounds(Vector3.zero,Vector3.zero);bool first=true;
+            foreach(var c in contacts)
+            {
+                if(!c || !c.enabled || c.isTrigger)continue;
+                Bounds local=c is BoxCollider box?new Bounds(box.center,box.size):c is MeshCollider mesh && mesh.sharedMesh?mesh.sharedMesh.bounds:new Bounds(c.transform.InverseTransformPoint(c.bounds.center),c.bounds.size);
+                for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
+                {
+                    var p=transform.InverseTransformPoint(c.transform.TransformPoint(local.center+Vector3.Scale(local.extents,new Vector3(x,y,z))));
+                    if(first){bounds=new Bounds(p,Vector3.zero);first=false;}else bounds.Encapsulate(p);
+                }
+            }
+            return bounds;
+        }
+    }
     public float Depth(Terrain terrain)
     {
         if (!terrain) return 0;

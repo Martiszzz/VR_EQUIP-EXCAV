@@ -32,6 +32,7 @@ public static class RealisticControlValidation
             RealBucketWorkValidation.Check();
             EngineAudioValidation.Check();
             TerrainDriveValidation.Check();
+            ExcavatorPhysicsValidation.Check();
             Debug.Log("REALISTIC CONTROLS PASS: restart, idle power, track lever limits, thumbstick, ground contact, extended digging and conserved pushing.");
             EditorApplication.Exit(0);
         }
@@ -137,9 +138,10 @@ public static class RealisticControlValidation
             var rb = prefab.AddComponent<Rigidbody>();
             system.blockPrefab = prefab.AddComponent<DirtBlock>();
             system.blockPrefab.rb = rb;
-            bucket.pourPoint = bucketObject.transform;
+            var edge=new GameObject("Forward cutting lip").transform;edge.SetParent(bucketObject.transform,false);edge.position=bucketObject.transform.position+Vector3.right*0.2f;
+            bucket.pourPoint = edge;
             var teeth = bucketObject.AddComponent<DigTeeth>();
-            teeth.tip = bucketObject.transform;
+            teeth.tip = edge;
             DigSystem.I = system;
             Ignition.EngineRunning = true;
             Require(!bucket.IsDumping, "Extended bucket at soil is treated as unloading");

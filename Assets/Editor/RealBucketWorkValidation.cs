@@ -45,6 +45,7 @@ public static class RealBucketWorkValidation
             Check(bucket.CapturedCount > 0 && Math.Abs(beforeCut - Volume(data) - scooped) < 0.0002,
                 "Actual forward-facing teeth do not collect the excavated soil");
             Debug.Log("REAL TEETH SCOOP PASS: actual tooth edge removes terrain and collects the same volume into the bucket.");
+            CheckCurl(root,instrument,bucket,teeth,system);
             while (bucket.CapturedCount < 60)
             {
                 Check(bucket.TryGetSpawnPosition(system.blockSize, out var p), "Actual bucket cannot hold its configured load");
@@ -112,6 +113,31 @@ public static class RealBucketWorkValidation
             UnityEngine.Object.DestroyImmediate(ground); UnityEngine.Object.DestroyImmediate(data);
         }
     }
+    static void CheckCurl(Transform root,Transform instrument,BucketInside bucket,DigTeeth teeth,DigSystem system)
+    {
+        Quaternion original=instrument.localRotation;Vector3 rootPosition=root.position;
+        var probe=ExcavatorBody.For(root).CreateProbe(instrument);bool tested=false;
+        foreach(float pose in new[]{-60f,-40f,-20f,20f,40f,60f})
+        {
+            foreach(float sign in new[]{-1f,1f})
+            {
+                instrument.localRotation=original*Quaternion.AngleAxis(pose,Vector3.right);
+                Place(root,bucket,new Vector3(4004,1.94f,4004));
+                float up=Vector3.Dot(bucket.transform.forward,Vector3.up);Vector3 tip=teeth.tip.position;
+                probe.BeginMove();instrument.localRotation*=Quaternion.AngleAxis(sign,Vector3.right);
+                Vector3 motion=teeth.tip.position-tip;
+                if(Vector3.Dot(bucket.transform.forward,Vector3.up)<=up+0.00001f || teeth.tip.position.y>=2)continue;
+                float before=bucket.HeldVolume+teeth.PendingVolume;
+                probe.WorkSoil(0.02f);
+                Check(!bucket.GradingContact && bucket.HeldVolume+teeth.PendingVolume>before,"Closing bucket curl fails to collect soil through its teeth");
+                tested=true;break;
+            }
+            if(tested)break;
+        }
+        instrument.localRotation=original;root.position=rootPosition;
+        Check(tested,"Missing real closing curl fixture");
+        Debug.Log("REAL BUCKET CURL PASS: closing the bucket collects soil, while flat back dragging remains grading.");
+    }
     static LeverTilt Lever(Transform parent, string name)
     { var go = new GameObject(name); go.transform.SetParent(parent, false); go.AddComponent<XRSimpleInteractable>(); return go.AddComponent<LeverTilt>(); }
     static void Invoke(MonoBehaviour obj, string method) { obj.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(obj, null); }
@@ -127,7 +153,7 @@ public static class RealBucketWorkValidation
     static double Volume(TerrainData td)
     { double total=0; foreach(float h in td.GetHeights(0,0,td.heightmapResolution,td.heightmapResolution)) total+=h; return total*td.size.y*td.heightmapScale.x*td.heightmapScale.z; }
     static void Check(bool ok, string message) { if(!ok) throw new InvalidOperationException(message); }
-    class Geometry
+    public class Geometry
     {
         readonly Dictionary<string,string> blocks;
         readonly Dictionary<string,Transform> nodes = new Dictionary<string,Transform>();

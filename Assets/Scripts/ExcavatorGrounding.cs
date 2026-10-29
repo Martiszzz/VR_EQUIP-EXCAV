@@ -16,6 +16,9 @@ public class ExcavatorGrounding : MonoBehaviour
     [Min(0.1f)] public float gravity = 9.81f;
     [Min(0.1f)] public float maxFallSpeed = 5;
     [Min(0.01f)] public float stabilityMargin = 0.08f;
+    [Range(1,15)] public float maxHydraulicTilt = 10;
+    [Min(1)] public float hydraulicTiltSpeed = 12;
+    public float HydraulicLoad { get; private set; }
     public LayerMask groundLayers = ~0;
     public bool Ready { get; private set; }
     public bool IsGrounded { get; private set; }
@@ -163,6 +166,7 @@ public class ExcavatorGrounding : MonoBehaviour
     }
     public void Settle(float dt)
     {
+        HydraulicLoad = Mathf.MoveTowards(HydraulicLoad,0,dt*1.5f);
         if (!Ready || dt <= 0) return;
         Gather(chassis.position, chassis.rotation);
         bool supported = Plane(true, out var normal);
@@ -206,6 +210,38 @@ public class ExcavatorGrounding : MonoBehaviour
         // Descending a ledge loses contact and lets gravity settle the machine on subsequent ticks.
         fittedPosition.y = Mathf.Max(y, position.y);
         return true;
+    }
+    public void ReportHydraulicWork(float volume,float dt)
+    {
+        if(dt>0)HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(volume/dt/0.012f));
+    }
+    public bool TryHydraulicReaction(Vector3 tool,float depth,float dt)
+    {
+        if(!Ready || !Ignition.EngineRunning || depth<=0 || depth>0.08f || dt<=0)return false;
+        Gather(chassis.position,chassis.rotation);
+        var direction=Vector3.ProjectOnPlane(tool-Pivot,Vector3.up).normalized;
+        if(direction.sqrMagnitude<0.5f)return false;
+        float back=float.PositiveInfinity;
+        for(int i=0;i<12;i++)if(found[i] && Mathf.Abs(feet[i].y-surface[i].y-groundClearance)<0.05f)
+            back=Mathf.Min(back,Vector3.Dot(feet[i],direction));
+        if(float.IsPositiveInfinity(back))return false;
+        Vector3 pivot=Vector3.zero;int count=0;
+        for(int i=0;i<12;i++)if(found[i] && Vector3.Dot(feet[i],direction)<=back+0.04f)
+        {pivot+=new Vector3(feet[i].x,surface[i].y+groundClearance,feet[i].z);count++;}
+        if(count==0)return false;pivot/=count;
+        float arm=Vector3.Dot(tool-pivot,direction);
+        if(arm<0.25f)return false;
+        float angle=Mathf.Min(Mathf.Asin(Mathf.Clamp01((depth+0.001f)/arm))*Mathf.Rad2Deg,hydraulicTiltSpeed*dt);
+        Quaternion turn=Quaternion.AngleAxis(angle,Vector3.Cross(direction,Vector3.up));
+        Quaternion rotation=turn*chassis.rotation;
+        if(Vector3.Angle(rotation*Vector3.up,SupportNormal)>maxHydraulicTilt || Vector3.Angle(rotation*Vector3.up,Vector3.up)>maxBodyTilt)return false;
+        Vector3 oldPosition=chassis.position;Quaternion oldRotation=chassis.rotation;
+        chassis.SetPositionAndRotation(pivot+turn*(chassis.position-pivot),rotation);
+        Gather(chassis.position,chassis.rotation);
+        for(int i=0;i<12;i++)if(found[i] && feet[i].y<surface[i].y-0.01f)
+        {chassis.SetPositionAndRotation(oldPosition,oldRotation);RefreshState();return false;}
+        HydraulicLoad=1;
+        RefreshState();return true;
     }
     public Vector3 SupportPoint(int index) => chassis.TransformPoint(contacts[index]);
 }
