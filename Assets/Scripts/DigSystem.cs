@@ -26,6 +26,21 @@ public class DigSystem : MonoBehaviour
         terrainDirty = false;
     }
     public float BlockVolume => blockSize * blockSize * blockSize;
+    // Redistribute a shallow strip ahead of a full bucket instead of deleting soil or teleporting through it.
+    public float PushSoil(Vector3 point, Vector3 motion, float radius, float maxDepth)
+    {
+        var horizontal = Vector3.ProjectOnPlane(motion, Vector3.up);
+        if (horizontal.magnitude < 0.0001f || horizontal.magnitude < Mathf.Abs(motion.y) || !ContainsTerrainPoint(point)) return 0;
+        var destination = point + horizontal.normalized * radius * 1.8f;
+        if (!ContainsTerrainPoint(destination)) return 0;
+        float penetration = SurfaceY(point) - point.y;
+        if (penetration <= 0) return 0;
+        float budget = horizontal.magnitude * radius * 2f * Mathf.Min(penetration, maxDepth);
+        float removed = Dig(point, radius, Mathf.Min(penetration, maxDepth), budget, point.y);
+        float deposited = Add(destination, radius, removed, true);
+        if (deposited < removed) Add(point, radius, removed - deposited, true);
+        return deposited;
+    }
     public int FreeBlocks => Mathf.Max(0, maxBlocks - active.Count);
     public bool CanSpawn => FreeBlocks > 0 && blockPrefab;
     float CellArea => terrain.terrainData.heightmapScale.x * terrain.terrainData.heightmapScale.z;

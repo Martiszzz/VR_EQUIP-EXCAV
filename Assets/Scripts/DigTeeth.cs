@@ -10,19 +10,25 @@ public class DigTeeth : MonoBehaviour
     [Min(0.1f)] public float maxSweepDistance = 1f;
     Vector3 last;
     float carry;
+    public float PendingVolume => carry;
+    public void ResetSweep() { if (tip) last = tip.position; }
     void OnEnable() { if (tip) last = tip.position; }
-    void FixedUpdate()
+    void FixedUpdate() { if (tip) Sweep(last, tip.position, Time.fixedDeltaTime); }
+    public void Sweep(Vector3 start, Vector3 p, float dt)
     {
         if (!tip) return;
-        Vector3 p = tip.position, start = last;
         last = p;
         var s = DigSystem.I;
         float distance = Vector3.Distance(start, p);
-        if (!s || !s.bucket || !Ignition.EngineRunning || s.bucket.IsDumping) return;
-        if (distance < minSpeed * Time.fixedDeltaTime || distance > maxSweepDistance) return;
+        if (!s || !s.bucket || !Ignition.EngineRunning) return;
+        if (distance < minSpeed * dt || distance > maxSweepDistance) return;
         int slots = Mathf.Min(s.bucket.FreeSlots(s.blockSize), s.FreeBlocks);
         float budget = Mathf.Max(0f, slots * s.BlockVolume - carry);
-        if (budget <= 0f) return;
+        if (budget <= 0f)
+        {
+            s.PushSoil(p, p - start, radius, maxDepthPerStep);
+            return;
+        }
         int steps = Mathf.Clamp(Mathf.CeilToInt(distance / (radius * 0.5f)), 1, 8);
         for (int i = 1; i <= steps && budget > 0f; i++)
         {

@@ -10,6 +10,8 @@ public class Throttle : MonoBehaviour
     public bool invert;                    // jei didėja ne ta kryptimi
 
     [Range(0, 1)] public float Value;      // 0..1
+    [Range(0.1f, 0.6f)] public float idlePower = 0.3f;
+    public float Power => Ignition.EngineRunning ? Mathf.Lerp(idlePower, 1f, Mathf.Clamp01(Value)) : 0;
 
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
@@ -53,6 +55,6 @@ public class Throttle : MonoBehaviour
         wasHeld = held;
 
         transform.localRotation = restLocalRot * Quaternion.AngleAxis(angle, ax);
-        Value = angle / maxAngle;
+        Value = angle / Mathf.Max(1f, maxAngle);
     }
 }

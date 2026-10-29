@@ -34,6 +34,10 @@ public class BucketInside : MonoBehaviour
     {
         get
         {
+            // A tipped bucket cutting at ground level is digging, rather than unloading in the air.
+            var system = DigSystem.I;
+            if (system && system.bucket == this && pourPoint && system.ContainsTerrainPoint(pourPoint.position) &&
+                pourPoint.position.y <= system.SurfaceY(pourPoint.position) + 0.04f) return false;
             float up = Vector3.Dot(transform.TransformDirection(openingAxis.normalized), Vector3.up);
             float lipDown = Vector3.Dot(transform.TransformDirection(lipAxis.normalized), Vector3.down);
             return up < Mathf.Cos(dumpAngle * Mathf.Deg2Rad) && (lipDown > 0.5f || up < -0.2f);

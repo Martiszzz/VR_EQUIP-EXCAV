@@ -1893,6 +1893,9 @@ MonoBehaviour:
   invertSide: 0
   stemAxis: {x: 0, y: 1, z: 0}
   extraTips: []
+  gripLever: {fileID: 7119197045842624717}
+  controllerHand: 5
+  thumbDeadzone: 0.15
 --- !u!1 &1170019394
 GameObject:
   m_ObjectHideFlags: 0
@@ -1951,6 +1954,9 @@ MonoBehaviour:
   invertSide: 0
   stemAxis: {x: 0, y: 1, z: 0}
   extraTips: []
+  gripLever: {fileID: 9107482286238615050}
+  controllerHand: 4
+  thumbDeadzone: 0.15
 --- !u!1001 &1190861774
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4024,6 +4030,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 1
 --- !u!114 &2048484086
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7566,13 +7573,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 15
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7474370918123358345
 MonoBehaviour:
@@ -7691,13 +7699,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 15
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7611461237230684709
 MonoBehaviour:

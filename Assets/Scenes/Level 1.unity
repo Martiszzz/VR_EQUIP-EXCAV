@@ -432,7 +432,7 @@ Transform:
   m_GameObject: {fileID: 151281892}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.0026, y: 0.22982, z: -0.20907}
+  m_LocalPosition: {x: 0.0026, y: 0.22982, z: -0.275}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1647,6 +1647,9 @@ MonoBehaviour:
   invertSide: 0
   stemAxis: {x: 0, y: 1, z: 0}
   extraTips: []
+  gripLever: {fileID: 7119197045842624717}
+  controllerHand: 5
+  thumbDeadzone: 0.15
 --- !u!1001 &1190861774
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3238,15 +3241,15 @@ MonoBehaviour:
   input: 1
   target: {fileID: 8785660220177547002}
   localAxis: {x: 1, y: 0, z: 0}
-  speed: 28
+  speed: 48
   limit: 1
   minAngle: -80
   maxAngle: 85
   deadzone: 0.12
-  acceleration: 45
-  braking: 80
+  acceleration: 95
+  braking: 130
   responseCurve: 1.6
-  invert: 0
+  invert: 1
   useWorldAxis: 0
   throttle: {fileID: 7008082312208645429}
   blockByWorld: 1
@@ -3362,6 +3365,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 7008082312208645429}
   blockByWorld: 1
+  blockByTerrain: 1
 --- !u!1001 &2074995043
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6551,13 +6555,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 15
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7474370918123358345
 MonoBehaviour:
@@ -6725,13 +6730,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LeverTilt
   Forward: 0
   Side: 0
-  maxAngle: 25
+  maxAngle: 15
   returnToCenter: 1
   returnSpeed: 75
   responseTime: 0.14
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7611461237230684709
 MonoBehaviour:
@@ -6857,6 +6863,7 @@ MonoBehaviour:
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7731109980590164692
 MonoBehaviour:

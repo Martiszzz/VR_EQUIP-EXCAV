@@ -30,11 +30,26 @@ public class ExcavatorBody : MonoBehaviour
         readonly Transform part;
         readonly List<Collider> mine = new List<Collider>();
         readonly List<BucketInside> buckets = new List<BucketInside>();
+        readonly List<GroundedAttachment> grounded = new List<GroundedAttachment>();
+        readonly List<DigTeeth> teeth = new List<DigTeeth>();
+        readonly List<Vector3> previousTips = new List<Vector3>();
         float nextRefresh = -1f;
 
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
+        public void BeginMove()
+        {
+            part.GetComponentsInChildren<DigTeeth>(false, teeth);
+            previousTips.Clear();
+            foreach (var tooth in teeth) previousTips.Add(tooth.tip ? tooth.tip.position : Vector3.zero);
+        }
+        public void WorkSoil(float dt)
+        {
+            for (int i = 0; i < teeth.Count; i++)
+                if (teeth[i].tip) teeth[i].Sweep(previousTips[i], teeth[i].tip.position, dt);
+        }
+        public void CancelMove() { foreach (var tooth in teeth) tooth.ResetSweep(); }
 
         public float GroundDepth()
         {
@@ -42,6 +57,9 @@ public class ExcavatorBody : MonoBehaviour
             part.GetComponentsInChildren<BucketInside>(false, buckets);
             float depth = 0;
             foreach (var bucket in buckets) depth = Mathf.Max(depth, bucket.GroundPenetration(DigSystem.I));
+            part.GetComponentsInChildren<GroundedAttachment>(false, grounded);
+            var terrain = DigSystem.I ? DigSystem.I.terrain : Terrain.activeTerrain;
+            foreach (var attachment in grounded) depth = Mathf.Max(depth, attachment.Depth(terrain));
             return depth;
         }
 

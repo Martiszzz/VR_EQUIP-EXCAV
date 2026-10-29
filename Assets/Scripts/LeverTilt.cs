@@ -11,12 +11,14 @@ public class LeverTilt : LeverBase
     [Min(0.02f)] public float responseTime = 0.14f;
     [Min(1f)] public float followSpeed = 120f;
     public bool invertForward, invertSide;
+    public bool forwardOnly;
     public Vector3 stemAxis = Vector3.forward;
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
     float pitch, roll, pitchVelocity, rollVelocity;
     float grabPitch, grabRoll, startPitch, startRoll;
     bool wasHeld;
+    public bool IsHeld => interactable && interactable.isSelected && interactable.interactorsSelecting.Count > 0;
     void Awake()
     {
         interactable = GetComponent<XRBaseInteractable>();
@@ -24,7 +26,7 @@ public class LeverTilt : LeverBase
     }
     void Update()
     {
-        bool held = interactable.isSelected && interactable.interactorsSelecting.Count > 0;
+        bool held = IsHeld;
         float targetPitch = pitch, targetRoll = roll;
         if (held)
         {
@@ -40,18 +42,26 @@ public class LeverTilt : LeverBase
                 startPitch = pitch; startRoll = roll;
             }
             var tilt = Vector2.ClampMagnitude(new Vector2(startPitch + Mathf.DeltaAngle(grabPitch, handPitch),
-                startRoll + Mathf.DeltaAngle(grabRoll, handRoll)), maxAngle);
+                forwardOnly ? 0 : startRoll + Mathf.DeltaAngle(grabRoll, handRoll)), maxAngle);
             targetPitch = tilt.x; targetRoll = tilt.y;
         }
         else if (returnToCenter) { targetPitch = targetRoll = 0; }
+        StepTilt(new Vector2(targetPitch, targetRoll), held, Time.deltaTime);
+    }
+    public void StepTilt(Vector2 target, bool held, float dt)
+    {
+        if (forwardOnly) target.y = 0;
+        var bounded = Vector2.ClampMagnitude(target, maxAngle);
+        float targetPitch = bounded.x, targetRoll = bounded.y;
+        if (forwardOnly) { targetRoll = roll = rollVelocity = 0; }
         float rate = held ? followSpeed : returnSpeed;
-        pitch = Mathf.SmoothDamp(pitch, targetPitch, ref pitchVelocity, responseTime, rate);
-        roll = Mathf.SmoothDamp(roll, targetRoll, ref rollVelocity, responseTime, rate);
+        pitch = Mathf.SmoothDamp(pitch, targetPitch, ref pitchVelocity, responseTime, rate, dt);
+        roll = Mathf.SmoothDamp(roll, targetRoll, ref rollVelocity, responseTime, rate, dt);
         var limited = Vector2.ClampMagnitude(new Vector2(pitch, roll), maxAngle);
         pitch = limited.x; roll = limited.y;
         wasHeld = held;
         transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
         Forward = (invertForward ? -1 : 1) * pitch / Mathf.Max(1f, maxAngle);
-        Side = (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
+        Side = forwardOnly ? 0 : (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
     }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.XR;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 
 public class FingerStick : LeverBase
@@ -12,6 +13,9 @@ public class FingerStick : LeverBase
     public bool invertForward, invertSide;
     public Vector3 stemAxis = Vector3.up;
     public Transform[] extraTips;
+    public LeverTilt gripLever;
+    public XRNode controllerHand = XRNode.RightHand;
+    [Range(0, 0.4f)] public float thumbDeadzone = 0.15f;
     Quaternion restLocalRot;
     float pitch, roll, pitchVelocity, rollVelocity;
     float grabPitch, grabRoll, startPitch, startRoll, lastTouch;
@@ -45,6 +49,13 @@ public class FingerStick : LeverBase
     void Update()
     {
         if (!head) return;
+        var device = InputDevices.GetDeviceAtXRNode(controllerHand);
+        if (gripLever && gripLever.IsHeld && device.TryGetFeatureValue(CommonUsages.primary2DAxis, out var thumb))
+        {
+            StepThumbstick(thumb, true, Time.deltaTime);
+            touching = false;
+            return;
+        }
         float targetPitch = pitch, targetRoll = roll;
         bool held = FindTip(out var tip);
         if (held)
@@ -77,5 +88,16 @@ public class FingerStick : LeverBase
         transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
         Forward = (invertForward ? -1 : 1) * pitch / Mathf.Max(1f, maxAngle);
         Side = (invertSide ? -1 : 1) * roll / Mathf.Max(1f, maxAngle);
+    }
+    public void StepThumbstick(Vector2 input, bool gripped, float dt)
+    {
+        float magnitude = Mathf.Clamp01(input.magnitude);
+        input = !gripped || magnitude <= thumbDeadzone ? Vector2.zero :
+            input.normalized * Mathf.InverseLerp(thumbDeadzone, 1, magnitude);
+        pitch = Mathf.SmoothDamp(pitch, input.y * maxAngle, ref pitchVelocity, responseTime, followSpeed, dt);
+        roll = Mathf.SmoothDamp(roll, input.x * maxAngle, ref rollVelocity, responseTime, followSpeed, dt);
+        transform.localRotation = restLocalRot * JoystickMotion.Tilt(pitch, roll, stemAxis, maxAngle);
+        Forward = (invertForward ? -1 : 1) * pitch / maxAngle;
+        Side = (invertSide ? -1 : 1) * roll / maxAngle;
     }
 }

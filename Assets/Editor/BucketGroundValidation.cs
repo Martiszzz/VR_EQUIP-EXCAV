@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 public static class BucketGroundValidation
 {
@@ -38,6 +39,7 @@ public static class BucketGroundValidation
             system.blockPrefab.rb = prefabBody;
             DigSystem.I = system;
             Ignition.EngineRunning = true;
+            rig.AddComponent<XRSimpleInteractable>();
             var lever = rig.AddComponent<LeverTilt>();
             var driver = rig.AddComponent<PartDriver>();
             driver.lever = lever;

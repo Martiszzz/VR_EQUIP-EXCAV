@@ -76,7 +76,7 @@ public class Claw : MonoBehaviour
         float a = Mathf.Clamp01((Mathf.Abs(v) - deadzone) / Mathf.Max(0.01f, 1f - deadzone));
         v = Mathf.Sign(v) * a * a;
 
-        float t = throttle ? Mathf.Clamp01(throttle.Value) : 1f;
+        float t = throttle ? throttle.Power : 1f;
         float delta = v * closeSpeed * t * dt;
 
         if (held && delta < 0f) Release();

@@ -23,7 +23,8 @@ public class Ignition : MonoBehaviour
 
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
-    float angle, grabAngle, grabHandAngle;
+    float angle, grabAngle;
+    Quaternion grabHandRotation;
     bool wasHeld;
 
     void Awake()
@@ -43,27 +44,31 @@ public class Ignition : MonoBehaviour
         {
             Transform hand = interactable.interactorsSelecting[0].GetAttachTransform(interactable);
             Quaternion restFrame = (transform.parent ? transform.parent.rotation : Quaternion.identity) * restLocalRot;
-            Vector3 d = Quaternion.Inverse(restFrame) * (hand.position - transform.position);
-
-            Vector3 reference = Vector3.ProjectOnPlane(Vector3.up, ax);
-            if (reference.sqrMagnitude < 0.01f) reference = Vector3.ProjectOnPlane(Vector3.forward, ax);
-            float handAngle = Vector3.SignedAngle(reference, Vector3.ProjectOnPlane(d, ax), ax);
-
-            if (!wasHeld) { grabHandAngle = handAngle; grabAngle = angle; }
-
-            angle = Mathf.Clamp(grabAngle + Mathf.DeltaAngle(grabHandAngle, handAngle), 0f, startAngle);
-
-            if (!EngineRunning && angle >= startAngle - 0.5f) EngineRunning = true;
-            if (EngineRunning && angle <= offThreshold) EngineRunning = false;
+            Quaternion handRotation = Quaternion.Inverse(restFrame) * hand.rotation;
+            if (!wasHeld) grabHandRotation = handRotation;
+            Step(WristTwist(grabHandRotation, handRotation, ax), true, Time.deltaTime);
         }
-        else
+        else Step(0, false, Time.deltaTime);
+    }
+
+    public static float WristTwist(Quaternion from, Quaternion to, Vector3 axis)
+    {
+        var delta = to * Quaternion.Inverse(from);
+        float projected = Vector3.Dot(new Vector3(delta.x, delta.y, delta.z), axis.normalized);
+        return Mathf.DeltaAngle(0, 2f * Mathf.Atan2(projected, delta.w) * Mathf.Rad2Deg);
+    }
+    public void Step(float relativeTurn, bool held, float dt)
+    {
+        if (held)
         {
-            float target = EngineRunning ? runAngle : 0f;
-            angle = Mathf.MoveTowards(angle, target, returnSpeed * Time.deltaTime);
+            if (!wasHeld) grabAngle = angle;
+            angle = Mathf.Clamp(grabAngle + relativeTurn, 0, startAngle);
+            if (!EngineRunning && angle >= startAngle - 0.5f) EngineRunning = true;
+            else if (EngineRunning && angle <= offThreshold) EngineRunning = false;
         }
-
+        else angle = Mathf.MoveTowards(angle, EngineRunning ? runAngle : 0, returnSpeed * dt);
         wasHeld = held;
         running = EngineRunning;
-        transform.localRotation = restLocalRot * Quaternion.AngleAxis(angle, ax);
+        transform.localRotation = restLocalRot * Quaternion.AngleAxis(angle, axis.normalized * (invert ? -1 : 1));
     }
 }
