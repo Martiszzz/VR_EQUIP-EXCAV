@@ -5846,6 +5846,7 @@ GameObject:
   - component: {fileID: 5345148430944160316}
   - component: {fileID: 4004335138592435000}
   - component: {fileID: 7002261973182256911}
+  - component: {fileID: 2048484092}
   m_Layer: 0
   m_Name: Head
   m_TagString: Untagged
@@ -7700,6 +7701,29 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1170019395}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2048484092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6558627886208490360}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5194d6d1fe0436b9ac929038d2feb10, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorEngineAudio
+  startupClip: {fileID: 8300000, guid: b4f3324b8e2d4d3f99dbb24ed2319bc9, type: 3}
+  engineLoop: {fileID: 8300000, guid: f80fc09964f94266b1f114378e89f2ec, type: 3}
+  throttle: {fileID: 7008082312208645429}
+  engineOffset: {x: 0, y: 0.2, z: 0.05}
+  idlePitch: 0.9
+  fullPitch: 1.5
+  idleVolume: 0.35
+  fullVolume: 0.65
+  rpmResponse: 0.65
+  crossfade: 0.25
+  shutdownFade: 0.6
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

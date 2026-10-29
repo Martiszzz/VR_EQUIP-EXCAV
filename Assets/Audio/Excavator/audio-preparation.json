@@ -1,0 +1,19 @@
+{
+  "source": "Source/engine-start-original.mp3",
+  "sample_rate": 24000,
+  "channels": 1,
+  "startup_seconds": [
+    0,
+    1.9
+  ],
+  "loop_source_seconds": [
+    1.65,
+    3.0416666666666665
+  ],
+  "loop_overlap_seconds": 0.12,
+  "loop_duration_seconds": 1.2716666666666667,
+  "loop_seam_jump": 0.017574941377215395,
+  "loop_rms": 0.15999999999999998,
+  "loop_join_correlation": 0.25595080750127236,
+  "notes": "High RPM and shutdown are playback pitch/volume changes, not separate recordings."
+}
