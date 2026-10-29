@@ -283,7 +283,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 104113719}
   m_LocalRotation: {x: 0.5000001, y: -0.4999999, z: -0.5000001, w: 0.4999999}
-  m_LocalPosition: {x: -0.288, y: 0.08433104, z: 0.3420589}
+  m_LocalPosition: {x: 0, y: 0, z: 0.3420589}
   m_LocalScale: {x: 0.0005, y: 0.0005, z: 0.0005}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1381,10 +1381,12 @@ MonoBehaviour:
   excavator: {fileID: 1113508163246883981}
   forwardAxis: {x: 0, y: 0, z: 1}
   moveSpeed: 0.7
-  turnSpeed: 25
   deadzone: 0.12
   acceleration: 0.6
   braking: 1.2
+  trackHalfWidth: 0.5
+  turnMultiplier: 1
+  turnSpeed: 25
   turnAcceleration: 40
   throttle: {fileID: 0}
   blockByWorld: 1
@@ -3843,46 +3845,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2048484090
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2048484076}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 21a52b1382ad4069abbe3b14a7c900f1, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::SeatedExcavatorControls
---- !u!114 &2048484091
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2048484076}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::PartDriver
-  lever: {fileID: 7119197045842624717}
-  input: 1
-  target: {fileID: 3277301492896211551}
-  localAxis: {x: 1, y: 0, z: 0}
-  speed: 48
-  limit: 1
-  minAngle: -80
-  maxAngle: 85
-  deadzone: 0.12
-  acceleration: 95
-  braking: 130
-  responseCurve: 1.6
-  invert: 1
-  useWorldAxis: 0
-  throttle: {fileID: 9205069731105245680}
-  blockByWorld: 1
 --- !u!4 &2048484077
 Transform:
   m_ObjectHideFlags: 0
@@ -3927,6 +3889,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 0
 --- !u!114 &2048484080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3955,6 +3918,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 0
 --- !u!114 &2048484082
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3983,6 +3947,7 @@ MonoBehaviour:
   useWorldAxis: 1
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 0
 --- !u!114 &2048484083
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4011,6 +3976,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 0
 --- !u!114 &2048484084
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4039,6 +4005,7 @@ MonoBehaviour:
   useWorldAxis: 0
   throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
+  blockByTerrain: 0
 --- !u!114 &2048484085
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4117,6 +4084,154 @@ MonoBehaviour:
   ignoreLayers:
     serializedVersion: 2
     m_Bits: 0
+--- !u!114 &2048484090
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048484076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21a52b1382ad4069abbe3b14a7c900f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeatedExcavatorControls
+--- !u!114 &2048484091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048484076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e067d5a49f15d744dae27cc5d576e03a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PartDriver
+  lever: {fileID: 7119197045842624717}
+  input: 1
+  target: {fileID: 7750208608676226943}
+  localAxis: {x: 1, y: 0, z: 0}
+  speed: 48
+  limit: 1
+  minAngle: -80
+  maxAngle: 85
+  deadzone: 0.12
+  acceleration: 95
+  braking: 130
+  responseCurve: 1.6
+  invert: 1
+  useWorldAxis: 0
+  throttle: {fileID: 9205069731105245680}
+  blockByWorld: 1
+  blockByTerrain: 0
+--- !u!114 &2048484092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6558627886208490360}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5194d6d1fe0436b9ac929038d2feb10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorEngineAudio
+  startupClip: {fileID: 8300000, guid: b4f3324b8e2d4d3f99dbb24ed2319bc9, type: 3}
+  engineLoop: {fileID: 8300000, guid: f80fc09964f94266b1f114378e89f2ec, type: 3}
+  throttle: {fileID: 9205069731105245680}
+  engineOffset: {x: 0, y: 0.2, z: 0.05}
+  idlePitch: 0.9
+  fullPitch: 1.5
+  idleVolume: 0.35
+  fullVolume: 0.65
+  rpmResponse: 0.65
+  crossfade: 0.25
+  shutdownFade: 0.6
+--- !u!114 &2048484093
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd4a76ebca51429889a29ce673f689f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorGrounding
+  chassis: {fileID: 1113508163246883981}
+  leftTrack: {fileID: 346980961889796245}
+  rightTrack: {fileID: 1292206066633544386}
+  terrain: {fileID: 302056367}
+  maxDriveSlope: 32
+  maxBodyTilt: 40
+  tiltSpeed: 18
+  groundClearance: 0.012
+  maxStepHeight: 0.18
+  bridgeGap: 0.25
+  maxRiseSpeed: 2.5
+  gravity: 9.81
+  maxFallSpeed: 5
+  stabilityMargin: 0.08
+  maxHydraulicTilt: 10
+  hydraulicTiltSpeed: 12
+  massModel: {fileID: 2048484096}
+  groundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &2048484094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f2971ba07107454e981cf2500e217aae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrackVisuals
+  drive: {fileID: 810399764}
+  leftTrack: {fileID: 346980961889796245}
+  rightTrack: {fileID: 1292206066633544386}
+  linksPerTrack: 48
+--- !u!114 &2048484095
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e093a614f944176a1a2ed122026f46b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorHydraulics
+  pumpCapacity: 1.5
+  maximumPressure: 3
+--- !u!114 &2048484096
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54797a5b06a64da4bb2b53ff78cfe7df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorMass
+  grounding: {fileID: 2048484093}
+  boomPivot: {fileID: 2540124487336731028}
+  stickPivot: {fileID: 8101384908800261122}
+  toolPivot: {fileID: 3277301492896211551}
+  bucket: {fileID: 0}
+  blade: {fileID: 8488504430534877925}
+  baseMass: 1700
+  boomMass: 170
+  stickMass: 100
+  toolMass: 70
 --- !u!1001 &2074995043
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7400,6 +7515,7 @@ MonoBehaviour:
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 0
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &7119197045842624718
 MonoBehaviour:
@@ -8294,6 +8410,7 @@ MonoBehaviour:
   followSpeed: 120
   invertForward: 0
   invertSide: 0
+  forwardOnly: 0
   stemAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &9107482286238615051
 MonoBehaviour:
@@ -8429,6 +8546,7 @@ MonoBehaviour:
   maxAngle: 33
   invert: 1
   Value: 0
+  idlePower: 0.3
 --- !u!114 &9205069731105245682
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8524,29 +8642,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.0106544625, y: 0.0044601723, z: 0.023104684}
   m_Center: {x: 0.000000099884346, y: -0.00000050070224, z: 0.0097406665}
---- !u!114 &2048484092
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6558627886208490360}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5194d6d1fe0436b9ac929038d2feb10, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorEngineAudio
-  startupClip: {fileID: 8300000, guid: b4f3324b8e2d4d3f99dbb24ed2319bc9, type: 3}
-  engineLoop: {fileID: 8300000, guid: f80fc09964f94266b1f114378e89f2ec, type: 3}
-  throttle: {fileID: 9205069731105245680}
-  engineOffset: {x: 0, y: 0.2, z: 0.05}
-  idlePitch: 0.9
-  fullPitch: 1.5
-  idleVolume: 0.35
-  fullVolume: 0.65
-  rpmResponse: 0.65
-  crossfade: 0.25
-  shutdownFade: 0.6
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -8577,84 +8672,3 @@ SceneRoots:
   - {fileID: 314244860}
   - {fileID: 2005687253}
   - {fileID: 779627514}
---- !u!114 &2048484093
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bd4a76ebca51429889a29ce673f689f3, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorGrounding
-  chassis: {fileID: 1113508163246883981}
-  leftTrack: {fileID: 346980961889796245}
-  rightTrack: {fileID: 1292206066633544386}
-  terrain: {fileID: 302056367}
-  maxDriveSlope: 32
-  maxBodyTilt: 40
-  tiltSpeed: 18
-  groundClearance: 0.012
-  maxStepHeight: 0.18
-  bridgeGap: 0.25
-  maxRiseSpeed: 2.5
-  gravity: 9.81
-  maxFallSpeed: 5
-  groundLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  massModel: {fileID: 2048484096}
---- !u!114 &2048484094
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f2971ba07107454e981cf2500e217aae, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::TrackVisuals
-  drive: {fileID: 810399764}
-  leftTrack: {fileID: 346980961889796245}
-  rightTrack: {fileID: 1292206066633544386}
-  linksPerTrack: 48
---- !u!114 &2048484095
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e093a614f944176a1a2ed122026f46b, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorHydraulics
-  pumpCapacity: 1.5
-  maximumPressure: 3
---- !u!114 &2048484096
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 54797a5b06a64da4bb2b53ff78cfe7df, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorMass
-  grounding: {fileID: 2048484093}
-  boomPivot: {fileID: 2540124487336731028}
-  stickPivot: {fileID: 8101384908800261122}
-  toolPivot: {fileID: 3277301492896211551}
-  bucket: {fileID: 0}
-  blade: {fileID: 8488504430534877925}
-  baseMass: 1700
-  boomMass: 170
-  stickMass: 100
-  toolMass: 70

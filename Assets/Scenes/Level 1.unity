@@ -1850,6 +1850,8 @@ MonoBehaviour:
   braking: 1.2
   trackHalfWidth: 0.5
   turnMultiplier: 1
+  turnSpeed: 25
+  turnAcceleration: 40
   throttle: {fileID: 7008082312208645429}
   blockByWorld: 1
   grounding: {fileID: 2048484093}
@@ -3370,7 +3372,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6598815579406187037, guid: 18ddb545287c546e19cc77dc9fbb2189, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4976,6 +4978,90 @@ MonoBehaviour:
   rpmResponse: 0.65
   crossfade: 0.25
   shutdownFade: 0.6
+--- !u!114 &2048484093
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd4a76ebca51429889a29ce673f689f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorGrounding
+  chassis: {fileID: 1113508163246883981}
+  leftTrack: {fileID: 1645427157}
+  rightTrack: {fileID: 868185390}
+  terrain: {fileID: 302056367}
+  maxDriveSlope: 32
+  maxBodyTilt: 40
+  tiltSpeed: 18
+  groundClearance: 0.012
+  maxStepHeight: 0.18
+  bridgeGap: 0.25
+  maxRiseSpeed: 2.5
+  gravity: 9.81
+  maxFallSpeed: 5
+  stabilityMargin: 0.08
+  maxHydraulicTilt: 10
+  hydraulicTiltSpeed: 12
+  massModel: {fileID: 2048484096}
+  groundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &2048484094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f2971ba07107454e981cf2500e217aae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrackVisuals
+  drive: {fileID: 810399764}
+  leftTrack: {fileID: 1645427157}
+  rightTrack: {fileID: 868185390}
+  linksPerTrack: 48
+--- !u!114 &2048484095
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e093a614f944176a1a2ed122026f46b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorHydraulics
+  pumpCapacity: 1.5
+  maximumPressure: 3
+--- !u!114 &2048484096
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304038513419247159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54797a5b06a64da4bb2b53ff78cfe7df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorMass
+  grounding: {fileID: 2048484093}
+  boomPivot: {fileID: 2540124487336731028}
+  stickPivot: {fileID: 5701651948974088746}
+  toolPivot: {fileID: 8785660220177547002}
+  bucket: {fileID: 1249843220}
+  blade: {fileID: 8488504430534877925}
+  baseMass: 1700
+  boomMass: 170
+  stickMass: 100
+  toolMass: 70
 --- !u!1001 &2074995043
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -8861,6 +8947,7 @@ MonoBehaviour:
   cutPerMeter: 0.6
   maxSweepDistance: 1
   maxPushDepth: 0.16
+  toothCount: 5
 --- !u!54 &8957209296847212512
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -9075,84 +9162,3 @@ SceneRoots:
   - {fileID: 1847004709}
   - {fileID: 314244860}
   - {fileID: 1860454819}
---- !u!114 &2048484093
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bd4a76ebca51429889a29ce673f689f3, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorGrounding
-  chassis: {fileID: 1113508163246883981}
-  leftTrack: {fileID: 1645427157}
-  rightTrack: {fileID: 868185390}
-  terrain: {fileID: 302056367}
-  maxDriveSlope: 32
-  maxBodyTilt: 40
-  tiltSpeed: 18
-  groundClearance: 0.012
-  maxStepHeight: 0.18
-  bridgeGap: 0.25
-  maxRiseSpeed: 2.5
-  gravity: 9.81
-  maxFallSpeed: 5
-  groundLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  massModel: {fileID: 2048484096}
---- !u!114 &2048484094
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f2971ba07107454e981cf2500e217aae, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::TrackVisuals
-  drive: {fileID: 810399764}
-  leftTrack: {fileID: 1645427157}
-  rightTrack: {fileID: 868185390}
-  linksPerTrack: 48
---- !u!114 &2048484095
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e093a614f944176a1a2ed122026f46b, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorHydraulics
-  pumpCapacity: 1.5
-  maximumPressure: 3
---- !u!114 &2048484096
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 304038513419247159}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 54797a5b06a64da4bb2b53ff78cfe7df, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorMass
-  grounding: {fileID: 2048484093}
-  boomPivot: {fileID: 2540124487336731028}
-  stickPivot: {fileID: 5701651948974088746}
-  toolPivot: {fileID: 8785660220177547002}
-  bucket: {fileID: 1249843220}
-  blade: {fileID: 8488504430534877925}
-  baseMass: 1700
-  boomMass: 170
-  stickMass: 100
-  toolMass: 70
