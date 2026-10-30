@@ -12,8 +12,8 @@ public class LevelMenu : MonoBehaviour
         var presentation=GetComponent<ExcavatorMenuPresentation>();
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
-            if(presentation)presentation.ShowError("Nepavyko atidaryti lygio. Patikrink scenų sąrašą.");
-            Debug.LogError("Scena '" + sceneName + "' nerasta. Pridėkite ją į Build Profiles → Scene List.", this);
+            if(presentation)presentation.ShowError("Unable to open this level. Check the scene list.");
+            Debug.LogError("Scene '" + sceneName + "' was not found. Add it to Build Profiles > Scene List.", this);
             return;
         }
         IsLoading=true;
@@ -24,7 +24,7 @@ public class LevelMenu : MonoBehaviour
     {
         if(presentation)presentation.ShowLoading(name);
         var operation=SceneManager.LoadSceneAsync(name);
-        if(operation==null){IsLoading=false;if(presentation)presentation.RestoreAfterLoadFailure("Nepavyko įkelti lygio. Bandyk dar kartą.");yield break;}
+        if(operation==null){IsLoading=false;if(presentation)presentation.RestoreAfterLoadFailure("Unable to load this level. Please try again.");yield break;}
         operation.allowSceneActivation=false;
         float elapsed=0;
         while(operation.progress<0.9f || elapsed<0.4f)

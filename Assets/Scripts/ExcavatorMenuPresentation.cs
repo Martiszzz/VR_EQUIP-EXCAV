@@ -83,17 +83,17 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         PanelAt("Brand mark",Root,44,42,7,24,Amber,2).raycastTarget=false;
         Text("Brand",Root,"EQUIP / EXCAVATOR SIMULATOR",64,40,650,30,18,White,true);
         PanelAt("Online indicator",Root,876,48,7,7,new Color(.45f,.83f,.67f),4).raycastTarget=false;
-        Text("Ready",Root,"LAIKAS DIRBTI",894,39,160,28,15,new Color(.57f,.75f,.67f));
+        Text("Ready",Root,"READY TO WORK",894,39,160,28,15,new Color(.57f,.75f,.67f));
         Rule(Root,44,90,1012);
-        Text("Title",Root,"Tavo kita pamaina.",44,111,1012,64,48,White,true);
-        Text("Subtitle",Root,"Pasirink techniką ir pradėk darbą.",46,180,1008,34,22,Muted);
-        Card(excavation,false,44,"01","KASIMO AIKŠTELĖ","Kasimas, žemių stūmimas ir reljefo formavimas.","KAUŠAS");
-        Card(precision,true,560,"02","TIKSLŪS DARBAI","Rotatorius, griebtuvas ir objektų valdymas.","GRIEBTUVAS");
+        Text("Title",Root,"Your next shift.",44,111,1012,64,48,White,true);
+        Text("Subtitle",Root,"Choose your machine and get to work.",46,180,1008,34,22,Muted);
+        Card(excavation,false,44,"01","EXCAVATION YARD","Dig, move soil and shape the terrain.","BUCKET");
+        Card(precision,true,560,"02","PRECISION WORK","Rotate, grab and position objects.","GRAPPLE");
         Rule(Root,44,594,1012);
-        HelpButton=SmallButton("Controls",Root,"Valdymo atmintinė",44,617,258,49);HelpButton.onClick.AddListener(()=>ShowHelp(true));
-        Text("Pointer hint",Root,"Nukreipk spindulį ir spausk gaiduką",324,623,530,38,17,Muted);
-        QuitButton=SmallButton("Quit",Root,"Išeiti",916,617,140,49);if(controller)QuitButton.onClick.AddListener(controller.Quit);
-        status=Text("Footer status",Root,"PASIRINK LYGĮ IR PRADĖK",44,683,1012,20,12,new Color(.38f,.49f,.53f));
+        HelpButton=SmallButton("Controls",Root,"Controls guide",44,617,258,49);HelpButton.onClick.AddListener(()=>ShowHelp(true));
+        Text("Pointer hint",Root,"Point your controller and press the trigger",324,623,530,38,17,Muted);
+        QuitButton=SmallButton("Quit",Root,"Exit",916,617,140,49);if(controller)QuitButton.onClick.AddListener(controller.Quit);
+        status=Text("Footer status",Root,"CHOOSE A LEVEL TO BEGIN",44,683,1012,20,12,new Color(.38f,.49f,.53f));
         BuildHelp();BuildLoading();
         LinkNavigation();
         if(immersiveYard && bucketShowcase && grappleShowcase){Yard=gameObject.AddComponent<MenuYard>();Yard.Build(this,font,bucketShowcase,grappleShowcase);}
@@ -115,7 +115,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         Text("Number",button.transform,number,22,185,38,32,17,Amber,true);
         Text("Level title",button.transform,title,64,181,410,40,24,White,true);
         Text("Description",button.transform,description,22,226,452,46,18,Muted);
-        Text("Call to action",button.transform,"Pradėti darbą",22,285,380,30,18,Amber,true);
+        Text("Call to action",button.transform,"Start work",22,285,380,30,18,Amber,true);
         Text("Arrow",button.transform,"→",431,279,44,36,29,Amber);
         var feedback=button.gameObject.AddComponent<MenuButtonFeedback>();feedback.presentation=this;feedback.panel=panel;feedback.Initialize();
         button.onClick.AddListener(()=>PlayFeedback(true));
@@ -123,21 +123,21 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     void BuildHelp()
     {
         helpRoot=Rect("Controls overlay",Root,0,0,1100,720);PanelAt("Controls backdrop",helpRoot,0,0,1100,720,Ink,20);
-        Text("Help eyebrow",helpRoot,"PRIEŠ PRADEDANT",44,42,1012,30,17,Amber,true);
-        Text("Help heading",helpRoot,"Įsitaisyk. Užvesk. Valdyk.",44,100,1012,65,40,White,true);
-        Text("Help intro",helpRoot,"Valdyk techniką sėdėdamas patogioje vietoje.",44,179,1012,42,21,Muted);
-        HelpRow(255,"01","SUIMK RANKENĄ","Suimk svirtį VR valdikliu. Judink ją švelniai – didesnis nuokrypis didina judesio greitį.");
-        HelpRow(353,"02","UŽVESK VARIKLĮ","Pasuk užvedimo raktą. Gazo rankena reguliuoja variklio ir hidraulikos našumą.");
-        HelpRow(451,"03","VALDYK PRIEDĄ","Nykščio valdiklis veikia laikant pagrindinę svirtį. Kiekvieno lygio priedas skiriasi.");
-        CloseHelpButton=SmallButton("Close controls",helpRoot,"Grįžti prie lygių",44,617,300,49);CloseHelpButton.onClick.AddListener(()=>ShowHelp(false));helpRoot.gameObject.SetActive(false);
+        Text("Help eyebrow",helpRoot,"BEFORE YOU START",44,42,1012,30,17,Amber,true);
+        Text("Help heading",helpRoot,"Get seated. Start up. Take control.",44,100,1012,65,40,White,true);
+        Text("Help intro",helpRoot,"Get comfortable in your seat before operating the machine.",44,179,1012,42,21,Muted);
+        HelpRow(255,"01","GRIP A LEVER","Grip a lever with your VR controller. Move it gently; a larger tilt increases movement speed.");
+        HelpRow(353,"02","START THE ENGINE","Turn the ignition key. Use the throttle to adjust engine speed and hydraulic power.");
+        HelpRow(451,"03","CONTROL THE ATTACHMENT","The thumbstick works while you hold the main joystick. Each level uses a different attachment.");
+        CloseHelpButton=SmallButton("Close controls",helpRoot,"Back to level selection",44,617,300,49);CloseHelpButton.onClick.AddListener(()=>ShowHelp(false));helpRoot.gameObject.SetActive(false);
     }
     void HelpRow(float y,string number,string heading,string body)
     {Text("Step "+number,helpRoot,number,44,y,65,44,27,Amber,true);Text("Heading "+number,helpRoot,heading,121,y,900,32,20,White,true);Text("Body "+number,helpRoot,body,121,y+36,900,56,20,Muted);}
     void BuildLoading()
     {
         loadingRoot=Rect("Loading overlay",Root,0,0,1100,720);PanelAt("Loading backdrop",loadingRoot,0,0,1100,720,Ink,20);
-        Text("Loading eyebrow",loadingRoot,"RUOŠIAMA DARBO AIKŠTELĖ",70,245,960,40,18,Amber,true);
-        Text("Loading title",loadingRoot,"Tuoj pradėsime.",70,299,960,66,46,White,true);
+        Text("Loading eyebrow",loadingRoot,"PREPARING YOUR WORKSITE",70,245,960,40,18,Amber,true);
+        Text("Loading title",loadingRoot,"Almost ready.",70,299,960,66,46,White,true);
         PanelAt("Progress track",loadingRoot,70,415,960,5,new Color(.18f,.26f,.3f),2);
         progressFill=Rect("Progress fill",loadingRoot,70,415,1,5);var image=progressFill.gameObject.AddComponent<Image>();image.color=Amber;image.raycastTarget=false;
         progressText=Text("Progress label",loadingRoot,"0 %",70,443,960,36,20,Muted);loadingRoot.gameObject.SetActive(false);

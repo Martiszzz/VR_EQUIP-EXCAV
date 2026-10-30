@@ -15,7 +15,7 @@ public static class MenuPresentationValidation
     {
         if(EditorApplication.isCompiling || EditorApplication.isUpdating)return;
         EditorApplication.update-=Ready;SessionState.SetBool("RunMenuPresentationValidation",false);
-        try{Check();Debug.Log("MENU PRESENTATION PASS: preserved buttons, XR raycaster, world-space sizing, Lithuanian glyphs, readable layout, hover, help/focus, loading and recovery.");EditorApplication.Exit(0);}
+        try{Check();Debug.Log("MENU PRESENTATION PASS: preserved buttons, XR raycaster, world-space sizing, English labels, readable layout, hover, help/focus, loading and recovery.");EditorApplication.Exit(0);}
         catch(Exception e){Debug.LogException(e);EditorApplication.Exit(1);}
     }
     static void Require(bool ok,string message){if(!ok)throw new Exception(message);}
@@ -51,7 +51,7 @@ public static class MenuPresentationValidation
             view.CloseHelpButton.onClick.Invoke();Require(!view.HelpVisible && EventSystem.current.currentSelectedGameObject==view.HelpButton.gameObject,"Closing help loses controller focus");
             view.ShowLoading("Level 1");view.SetProgress(.65f);Require(!level1.interactable && !level2.interactable && !view.HelpButton.interactable,"Loading allows repeated actions");
             Layout(view);Screenshot(camera,"C:/Temp/VR-menu-loading.png");
-            view.RestoreAfterLoadFailure("Bandyk dar kartą.");Require(level1.interactable && level2.interactable && view.Status.text.Contains("Bandyk"),"Failed load cannot recover");
+            view.RestoreAfterLoadFailure("Please try again.");Require(level1.interactable && level2.interactable && view.Status.text.Contains("try again"),"Failed load cannot recover");
             string source=File.ReadAllText("Assets/Scenes/Menu.unity");Require(source.Contains("Assembly-CSharp::ExcavatorMenuPresentation") && source.Contains("TrackedDeviceGraphicRaycaster") && source.Contains("m_StringArgument: Level 1") && source.Contains("m_StringArgument: Level 2"),"Menu scene loses its XR raycaster or level actions");
         }
         finally{UnityEngine.Object.DestroyImmediate(go);UnityEngine.Object.DestroyImmediate(canvasObject);UnityEngine.Object.DestroyImmediate(events);UnityEngine.Object.DestroyImmediate(cameraObject);}
@@ -62,6 +62,7 @@ public static class MenuPresentationValidation
         foreach(var text in view.Root.GetComponentsInChildren<TMP_Text>())
         {
             text.ForceMeshUpdate(true,true);
+            Require(!System.Text.RegularExpressions.Regex.IsMatch(text.text,"[ąčęėįšųūžĄČĘĖĮŠŲŪŽ]"),"Menu contains untranslated text: "+text.text);
             Require(text.textBounds.size.y<text.rectTransform.rect.height+3,"Text exceeds vertical bounds: "+text.name+" / "+text.text);
             Require(text.textBounds.size.x<text.rectTransform.rect.width+3,"Text exceeds horizontal bounds: "+text.name);
             foreach(char c in text.text)if(!char.IsWhiteSpace(c))Require(text.font.HasCharacter(c,true,true),"Missing menu glyph: "+c);

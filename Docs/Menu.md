@@ -2,6 +2,8 @@
 
 Paleidus `Menu` sceną sukuriama 3D darbų aikštelė: du tikri lygių ekskavatoriai, betono ir grunto danga, fiziniai pasirinkimo stendai, valdymo pultas, aptvarai, konteineriai ir kūgiai. Tai erdvinė aplinka su perspektyva ir paralaksu, o ne visą vaizdą uždengiantis skydelis.
 
+Visi žaidėjui rodomi meniu tekstai yra anglų kalba, įskaitant 3D stendus, atmintinę, įkėlimo būseną ir klaidas.
+
 ## Pasirinkimas
 
 Galima nukreipti VR spindulį į patį ekskavatorių ir naudoti XR pasirinkimo veiksmą arba spausti jo stendo mygtuką. Abu keliai naudoja tą patį esamą lygio `OnClick` veiksmą. Pasirinkta darbo zona paryškinama apšvietimu. Kol atverta atmintinė ar įkeliamas lygis, pradėjimo veiksmai užblokuoti.

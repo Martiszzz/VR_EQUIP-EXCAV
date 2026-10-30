@@ -71,7 +71,7 @@ public static class ImmersiveMenuValidation
     static void Layout(ExcavatorMenuPresentation view)
     {
         Canvas.ForceUpdateCanvases();foreach(var t in view.Root.GetComponentsInChildren<TMP_Text>())
-        {t.ForceMeshUpdate(true,true);Require(t.textBounds.size.y<=t.rectTransform.rect.height+3,"3D sign text does not fit: "+t.name);Require(t.textBounds.size.x<=t.rectTransform.rect.width+3,"3D sign text is too wide: "+t.name);}
+        {t.ForceMeshUpdate(true,true);Require(!System.Text.RegularExpressions.Regex.IsMatch(t.text,"[ąčęėįšųūžĄČĘĖĮŠŲŪŽ]"),"Untranslated 3D sign: "+t.text);Require(t.textBounds.size.y<=t.rectTransform.rect.height+3,"3D sign text does not fit: "+t.name);Require(t.textBounds.size.x<=t.rectTransform.rect.width+3,"3D sign text is too wide: "+t.name);}
     }
     static Button Button(Transform parent,string name){var go=new GameObject(name,typeof(RectTransform),typeof(Image),typeof(Button));go.transform.SetParent(parent,false);return go.GetComponent<Button>();}
     static void Screenshot(Camera camera,string path)

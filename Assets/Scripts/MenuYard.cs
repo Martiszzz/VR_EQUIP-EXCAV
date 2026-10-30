@@ -51,15 +51,15 @@ public class MenuYard : MonoBehaviour
             var source=ambience.AddComponent<AudioSource>();source.clip=view.yardAmbience;source.loop=true;source.playOnAwake=false;source.volume=.035f;source.spatialBlend=1;source.minDistance=1.5f;source.maxDistance=16;source.dopplerLevel=0;if(Application.isPlaying)source.Play();
         }
         Header(font);
-        PlaceCard(view.excavation,0,new Vector3(-1.75f,1.02f,3.05f),-20,"01 / KASIMAS","Kaušas · žemės · reljefas");
-        PlaceCard(view.precision,1,new Vector3(1.75f,1.02f,3.05f),20,"02 / GRIEBTUVAS","Rotatorius · tikslūs judesiai");
+        PlaceCard(view.excavation,0,new Vector3(-1.75f,1.02f,3.05f),-20,"01 / EXCAVATION","Bucket · earthmoving · grading");
+        PlaceCard(view.precision,1,new Vector3(1.75f,1.02f,3.05f),20,"02 / GRAPPLE","Rotator · precise handling");
         Utility(view.HelpButton,new Vector3(-.25f,.87f,1.48f),320);
         Utility(view.QuitButton,new Vector3(.3f,.87f,1.48f),200);
         foreach(string name in new[]{"Controls overlay","Loading overlay"})
         {
             var overlay=(RectTransform)view.Root.Find(name);overlay.pivot=new Vector2(.5f,.5f);overlay.position=new Vector3(0,1.35f,1.95f);overlay.localRotation=Quaternion.identity;overlay.localScale=Vector3.one*.82f;
         }
-        var status=view.Status;if(status){status.gameObject.SetActive(true);PlaceText(status,new Vector3(0,.96f,1.48f),650,28,1);status.rectTransform.localRotation=Quaternion.Euler(25,0,0);status.fontSize=16;status.color=new Color(.7f,.78f,.78f);status.alignment=TextAlignmentOptions.Center;status.text="RINKIS TECHNIKĄ ARBA STENDĄ";}
+        var status=view.Status;if(status){status.gameObject.SetActive(true);PlaceText(status,new Vector3(0,.96f,1.48f),650,28,1);status.rectTransform.localRotation=Quaternion.Euler(25,0,0);status.fontSize=16;status.color=new Color(.7f,.78f,.78f);status.alignment=TextAlignmentOptions.Center;status.text="SELECT A MACHINE OR ITS SIGN";}
         Site.gameObject.SetActive(!Application.isPlaying);
     }
     public void Reveal(){if(Site)Site.gameObject.SetActive(true);}
@@ -113,7 +113,7 @@ public class MenuYard : MonoBehaviour
         var panel=(RectTransform)rect.Find("Card surface");panel.gameObject.SetActive(true);panel.sizeDelta=rect.sizeDelta;
         Label(button,"Level title",title,26,23,598,48,34);
         Label(button,"Description",description,26,88,598,42,24);
-        Label(button,"Call to action","Pradėti darbą",26,166,530,44,28);
+        Label(button,"Call to action","Start work",26,166,530,44,28);
         Label(button,"Arrow","→",565,157,52,50,36);
         button.GetComponent<MenuButtonFeedback>().Initialize();
         var stand=new GameObject(index==0?"Excavation selection stand":"Precision selection stand").transform;stand.SetParent(Site,false);stand.localPosition=point;stand.localRotation=Quaternion.Euler(0,yaw,0);Stands[index]=stand;
@@ -131,9 +131,9 @@ public class MenuYard : MonoBehaviour
     }
     void Header(TMP_FontAsset font)
     {
-        Text3D("Yard brand","EQUIP / EKSKAVATORIAUS SIMULIATORIUS",font,new Vector3(0,3.18f,6.9f),24,new Vector2(1600,90),.0025f,new Color(.85f,.74f,.5f));
-        Text3D("Worksite title","DARBO AIKŠTELĖ",font,new Vector3(0,2.86f,6.88f),86,new Vector2(1600,110),.003f,new Color(.91f,.94f,.91f));
-        Text3D("Worksite subtitle","Tavo kita pamaina prasideda čia.",font,new Vector3(0,2.57f,6.88f),25,new Vector2(1600,75),.0028f,new Color(.66f,.75f,.74f));
+        Text3D("Yard brand","EQUIP / EXCAVATOR SIMULATOR",font,new Vector3(0,3.18f,6.9f),24,new Vector2(1600,90),.0025f,new Color(.85f,.74f,.5f));
+        Text3D("Worksite title","TRAINING YARD",font,new Vector3(0,2.86f,6.88f),86,new Vector2(1600,110),.003f,new Color(.91f,.94f,.91f));
+        Text3D("Worksite subtitle","Your next shift starts here.",font,new Vector3(0,2.57f,6.88f),25,new Vector2(1600,75),.0028f,new Color(.66f,.75f,.74f));
     }
     void Text3D(string name,string value,TMP_FontAsset font,Vector3 point,float size,Vector2 dimensions,float scale,Color color)
     {
