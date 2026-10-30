@@ -1651,3 +1651,7 @@ MonoBehaviour:
   menuSounds: 1
   alignWithHead: 1
   viewingDistance: 2.3
+  immersiveYard: 1
+  bucketShowcase: {fileID: 1244225172790386933, guid: 7f4a7ad3e9c23bb40bd429fc89b44691, type: 3}
+  grappleShowcase: {fileID: 2374124167367777832, guid: 16b12abbc83c90b4a9a05b67895de539, type: 3}
+  yardAmbience: {fileID: 8300000, guid: f80fc09964f94266b1f114378e89f2ec, type: 3}

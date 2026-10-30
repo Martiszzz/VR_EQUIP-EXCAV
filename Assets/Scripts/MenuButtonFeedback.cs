@@ -15,6 +15,7 @@ public class MenuButtonFeedback : MonoBehaviour,IPointerEnterHandler,IPointerExi
         bool active=button && button.IsInteractable() && (hovered || selected);
         amount=Mathf.MoveTowards(amount,active?1:0,dt*7);
         if(panel){panel.color=Color.Lerp(normal,highlight,amount);panel.SetBorder(Color.Lerp(new Color(.2f,.28f,.32f),new Color(.94f,.69f,.26f),amount));}
+        if(presentation)presentation.SetSpatialFocus(button,amount);
         rect.anchoredPosition=home+Vector2.up*(amount*3);
         rect.localScale=Vector3.one*(pressed && active?.992f:1);
     }

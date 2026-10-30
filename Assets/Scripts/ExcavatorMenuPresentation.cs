@@ -10,6 +10,10 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     public Canvas canvas;
     public Button excavation,precision;
     public Font sourceFont;
+    public bool immersiveYard;
+    public GameObject bucketShowcase,grappleShowcase;
+    public AudioClip yardAmbience;
+    public MenuYard Yard {get;private set;}
     public Renderer environmentFloor;
     public Light environmentLight;
     Material floorMaterial;
@@ -36,17 +40,19 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     void Awake(){Build();}
     IEnumerator Start()
     {
-        if(!alignWithHead){anchorReady=true;yield break;}
+        if(!alignWithHead){anchorReady=true;if(Yard)Yard.Reveal();yield break;}
         yield return new WaitForSecondsRealtime(.35f);
         var camera=Camera.main;
         if(camera && canvas)
         {
             canvas.worldCamera=camera;
+            if(Yard){Yard.AlignToViewer(camera);anchorReady=true;yield break;}
             camera.clearFlags=CameraClearFlags.SolidColor;camera.backgroundColor=new Color(.035f,.065f,.085f);
             var forward=Vector3.ProjectOnPlane(camera.transform.forward,Vector3.up).normalized;
             if(forward.sqrMagnitude<.5f)forward=Vector3.forward;
             canvas.transform.SetPositionAndRotation(camera.transform.position+forward*viewingDistance-Vector3.up*.08f,Quaternion.LookRotation(forward,Vector3.up));
         }
+        if(Yard)Yard.Reveal();
         anchorReady=true;
     }
     public void Build()
@@ -90,6 +96,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         status=Text("Footer status",Root,"PASIRINK LYGĮ IR PRADĖK",44,683,1012,20,12,new Color(.38f,.49f,.53f));
         BuildHelp();BuildLoading();
         LinkNavigation();
+        if(immersiveYard && bucketShowcase && grappleShowcase){Yard=gameObject.AddComponent<MenuYard>();Yard.Build(this,font,bucketShowcase,grappleShowcase);}
         sound=gameObject.AddComponent<AudioSource>();sound.playOnAwake=false;sound.spatialBlend=0;sound.volume=.12f;sound.dopplerLevel=0;
         hoverClip=Tone("Menu focus",520,.045f);clickClip=Tone("Menu select",740,.07f);
         anchorReady=!alignWithHead || !Application.isPlaying;
@@ -145,6 +152,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     public void ShowHelp(bool show)
     {
         if(!IsBuilt || loading)return;helpRoot.gameObject.SetActive(show);
+        excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=!show;
         if(EventSystem.current)EventSystem.current.SetSelectedGameObject(show?CloseHelpButton.gameObject:HelpButton.gameObject);
     }
     public void ShowLoading(string scene)
@@ -168,6 +176,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         if(!IsBuilt || !anchorReady)return;age+=Time.unscaledDeltaTime;if(!loading){Group.alpha=Mathf.SmoothStep(0,1,age/.4f);Group.interactable=age>=.3f;}
         if(HelpVisible && Keyboard.current!=null && Keyboard.current.escapeKey.wasPressedThisFrame)ShowHelp(false);
     }
+    public void SetSpatialFocus(Button button,float amount){if(Yard)Yard.Focus(button,amount);}
     public void PlayFeedback(bool click)
     {if(!menuSounds || !sound || !Application.isPlaying || (!click && Time.unscaledTime-lastSound<.08f))return;lastSound=Time.unscaledTime;sound.PlayOneShot(click?clickClip:hoverClip);}
     Button SmallButton(string name,Transform parent,string label,float x,float y,float w,float h)

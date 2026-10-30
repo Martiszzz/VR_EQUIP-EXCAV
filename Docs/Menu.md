@@ -1,9 +1,17 @@
-# Pagrindinis meniu
+# Erdvinis VR meniu
 
-Naujas meniu sukuriamas paleidus `Menu` sceną. `ExcavatorMenuPresentation` prijungtas prie `MenuController`: jis naudoja esamus dviejų lygių mygtukus ir išsaugo jų `OnClick` scenų nuorodas. Scenos XR rig, įvesties modulis ir `TrackedDeviceGraphicRaycaster` lieka prijungti.
+Paleidus `Menu` sceną sukuriama 3D darbų aikštelė: du tikri lygių ekskavatoriai, betono ir grunto danga, fiziniai pasirinkimo stendai, valdymo pultas, aptvarai, konteineriai ir kūgiai. Tai erdvinė aplinka su perspektyva ir paralaksu, o ne visą vaizdą uždengiantis skydelis.
 
-Meniu kortelės, valdymo atmintinė ir tikro asinchroninio įkėlimo eiga pateikiamos lietuviškai. `Inter` šriftui sukuriamas dinaminis TMP atlasas su reikalingais simboliais. Iliustracijos yra lengva vektorinė UI geometrija. Pasirinkimo garsai sintezuojami vieną kartą; juos galima išjungti per `menuSounds`.
+## Pasirinkimas
 
-VR skydas yra 1,76 m pločio ir pirmą kartą išdėstomas maždaug 2,3 m prieš žaidėją. Jis neseka kiekvieno galvos judesio. Atstumas keičiamas per `viewingDistance`. Pasirinkimas vyksta esamu valdiklio spinduliu ir UI paspaudimu. Klaviatūros Escape uždaro valdymo atmintinę.
+Galima nukreipti VR spindulį į patį ekskavatorių ir naudoti XR pasirinkimo veiksmą arba spausti jo stendo mygtuką. Abu keliai naudoja tą patį esamą lygio `OnClick` veiksmą. Pasirinkta darbo zona paryškinama apšvietimu. Kol atverta atmintinė ar įkeliamas lygis, pradėjimo veiksmai užblokuoti.
 
-`MenuPresentationValidation.Run` tikrina, ar išlieka mygtukų veiksmai, nesidubliuoja UI ir garsai, telpa tekstai, yra lietuviški simboliai, veikia fokusas, atmintinė ir įkėlimo būsenos. Peržiūros įrašomos į `C:/Temp/VR-menu-main.png`, `VR-menu-focus.png`, `VR-menu-help.png` ir `VR-menu-loading.png`. Renderinant šias peržiūras Unity turi būti paleistas su grafika, be `-nographics`.
+`ExcavatorMenuPresentation.immersiveYard` įjungtas meniu scenoje. Aikštelė vieną kartą orientuojama pagal pradinę žaidėjo žiūrėjimo kryptį ir lieka pasaulyje; ji neseka galvos judesių. `bucketShowcase` ir `grappleShowcase` nurodo tikrus demonstracinius modelius. Valdymo atmintinė pateikiama atskirame artimesniame skydelyje. `menuSounds` išjungia pasirinkimo garsus ir tylų erdvinį aikštelės variklio foną.
+
+## Modeliai ir našumas
+
+`Assets/Menu` modeliai paruošti pagal tikras `Level 1` ir `Level 2` geometrijos pozicijas. Jie neturi kasimo, važiavimo ar variklio valdymo skriptų. Medžiagų dalys sujungtos į 8 ir 7 tinklus, o nenaudojamos viršūnės pašalintos. `MenuShowcaseBuilder.Run` gali perkurti šiuos demonstracinius prefabus po modelių pakeitimų; metodas skirtas atskiram Unity batch procesui ir jį užbaigia.
+
+## Patikros
+
+`ImmersiveMenuValidation.Run` tikrina tikrus modelius, skirtingą stendų gylį ir kampą, spindulio paspaudimus, pasirinkimą per 3D objektą, apšvietimo reakciją, atmintinę, blokavimą įkeliant ir scenų nuorodas. Taip pat generuojamos peržiūros `C:/Temp/VR-menu-yard.png`, `VR-menu-yard-side.png`, `VR-menu-yard-help.png` ir `VR-menu-yard-loading.png`. Renderinant Unity paleidžiamas su grafika, be `-nographics`. Galutinį VR pojūtį ir našumą reikia įvertinti su akiniais.
