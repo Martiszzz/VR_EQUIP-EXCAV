@@ -11,6 +11,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     public Button excavation,precision;
     public Font sourceFont;
     public bool immersiveYard;
+    [System.NonSerialized] public bool editorPreview;
     public GameObject bucketShowcase,grappleShowcase;
     public AudioClip yardAmbience;
     public MenuYard Yard {get;private set;}

@@ -4,6 +4,12 @@ Paleidus `Menu` sceną sukuriama 3D darbų aikštelė: du tikri lygių ekskavato
 
 Visi žaidėjui rodomi meniu tekstai yra anglų kalba, įskaitant 3D stendus, atmintinę, įkėlimo būseną ir klaidas.
 
+## Peržiūra redaktoriuje be Play
+
+Pasirink `Tools > Excavator > Preview 3D Menu`. Arba pažymėk `MenuController` ir jo Inspector lange spausk `Preview 3D Menu`. Atsidaro laikina 3D aikštelės peržiūra `Scene` lange. Galima laisvai sukti kamerą ir apžiūrėti modelius. Atmintinė rodoma per `Tools > Excavator > Preview Controls Guide`.
+
+Grįžk viršuje esančia etapo grįžimo rodykle arba `Tools > Excavator > Back to Scene`. Peržiūra neįrašoma į `Menu` ar kitą redaguojamą sceną ir automatiškai uždaroma prieš paleidžiant žaidimą.
+
 ## Pasirinkimas
 
 Galima nukreipti VR spindulį į patį ekskavatorių ir naudoti XR pasirinkimo veiksmą arba spausti jo stendo mygtuką. Abu keliai naudoja tą patį esamą lygio `OnClick` veiksmą. Pasirinkta darbo zona paryškinama apšvietimu. Kol atverta atmintinė ar įkeliamas lygis, pradėjimo veiksmai užblokuoti.

@@ -28,7 +28,7 @@ public class MenuYard : MonoBehaviour
             if(child!=view.excavation.transform && child!=view.precision.transform && child!=view.HelpButton.transform && child!=view.QuitButton.transform && child.name!="Controls overlay" && child.name!="Loading overlay")child.gameObject.SetActive(false);
         if(view.environmentFloor)view.environmentFloor.enabled=false;
         if(view.environmentLight){view.environmentLight.intensity=1.2f;view.environmentLight.shadows=LightShadows.Soft;view.environmentLight.transform.rotation=Quaternion.Euler(38,-28,0);}
-        RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.48f,.56f,.59f);RenderSettings.fog=true;RenderSettings.fogColor=new Color(.25f,.35f,.4f);RenderSettings.fogDensity=.014f;
+        if(!view.editorPreview){RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.48f,.56f,.59f);RenderSettings.fog=true;RenderSettings.fogColor=new Color(.25f,.35f,.4f);RenderSettings.fogDensity=.014f;}
         var ground=Box("Yard ground",new Vector3(0,-.08f,5),new Vector3(25,.16f,28),new Color(.65f,.68f,.65f));
         var groundMaterial=ground.GetComponent<Renderer>().sharedMaterial;var texture=SoilClodVisual.GroundLayer.diffuseTexture;
         groundMaterial.mainTexture=texture;groundMaterial.mainTextureScale=new Vector2(16,16);
@@ -40,7 +40,7 @@ public class MenuYard : MonoBehaviour
         Bay(0,new Vector3(-1.65f,0,5.1f));Bay(1,new Vector3(1.65f,0,5.1f));
         Machines[0]=Machine(bucket,new Vector3(-1.65f,.12f,5.15f),145);
         Machines[1]=Machine(grapple,new Vector3(1.65f,.12f,5.15f),-145);
-        for(int bay=0;bay<2;bay++){var choice=Machines[bay].AddComponent<MenuMachineChoice>();choice.yard=this;choice.bay=bay;choice.button=bay==0?view.excavation:view.precision;choice.Initialize();}
+        if(!view.editorPreview)for(int bay=0;bay<2;bay++){var choice=Machines[bay].AddComponent<MenuMachineChoice>();choice.yard=this;choice.bay=bay;choice.button=bay==0?view.excavation:view.precision;choice.Initialize();}
         Fence();BackWall();Console();
         for(int i=0;i<4;i++)Cone(new Vector3(i<2?-3.35f:3.35f,0,i%2==0?3.5f:6.65f));
         Pile(new Vector3(-2.5f,.08f,6.2f),.65f,.32f);Pile(new Vector3(-.7f,.08f,6.7f),.55f,.25f);
