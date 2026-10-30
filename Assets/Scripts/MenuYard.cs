@@ -7,6 +7,11 @@ using UnityEngine.UI;
 // A stationary, real-scale VR worksite. Only the signs use UI; the yard and machines have real depth.
 public class MenuYard : MonoBehaviour
 {
+    [SerializeField] Transform savedSite;
+    [SerializeField] GameObject[] savedMachines;
+    [SerializeField] Transform[] savedStands;
+    [SerializeField] Renderer[] savedLeftRails,savedRightRails;
+    [SerializeField] Light[] savedLights;
     public Transform Site {get;private set;}
     public GameObject[] Machines {get;private set;}=new GameObject[2];
     public Transform[] Stands {get;private set;}=new Transform[2];
@@ -61,6 +66,18 @@ public class MenuYard : MonoBehaviour
         }
         var status=view.Status;if(status){status.gameObject.SetActive(true);PlaceText(status,new Vector3(0,.96f,1.48f),650,28,1);status.rectTransform.localRotation=Quaternion.Euler(25,0,0);status.fontSize=16;status.color=new Color(.7f,.78f,.78f);status.alignment=TextAlignmentOptions.Center;status.text="SELECT A MACHINE OR ITS SIGN";}
         Site.gameObject.SetActive(!Application.isPlaying);
+    }
+    public void SaveLayoutBindings()
+    {
+        savedSite=Site;savedMachines=Machines;savedStands=Stands;savedLeftRails=focusRails[0];savedRightRails=focusRails[1];savedLights=focusLights;
+    }
+    public void BindSavedLayout(ExcavatorMenuPresentation presentation)
+    {
+        view=presentation;Site=savedSite;Machines=savedMachines;Stands=savedStands;focusRails[0]=savedLeftRails;focusRails[1]=savedRightRails;
+        for(int i=0;i<2;i++){focusLights[i]=savedLights[i];if(focusLights[i])focusLights[i].intensity=0;}
+        block=new MaterialPropertyBlock();IsBuilt=true;
+        foreach(var machine in Machines){var choice=machine.GetComponent<MenuMachineChoice>();if(choice)choice.Initialize();}
+        foreach(var source in Site.GetComponentsInChildren<AudioSource>())if(Application.isPlaying && presentation.menuSounds && source.clip && source.loop)source.Play();
     }
     public void Reveal(){if(Site)Site.gameObject.SetActive(true);}
     public void AlignToViewer(Camera camera)
@@ -202,6 +219,6 @@ public class MenuYard : MonoBehaviour
         }
         materials[color]=material;return material;
     }
-    void OnDestroy(){foreach(var m in materials.Values)Dispose(m);foreach(var m in meshes)Dispose(m);if(Site)Dispose(Site.gameObject);}
+    void OnDestroy(){if(savedMachines!=null && savedMachines.Length>0)return;foreach(var m in materials.Values)Dispose(m);foreach(var m in meshes)Dispose(m);if(Site)Dispose(Site.gameObject);}
     static void Dispose(Object value){if(!value)return;if(Application.isPlaying)Destroy(value);else DestroyImmediate(value);}
 }

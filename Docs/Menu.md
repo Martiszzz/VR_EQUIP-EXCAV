@@ -1,20 +1,20 @@
 # Erdvinis VR meniu
 
-Paleidus `Menu` sceną sukuriama 3D darbų aikštelė: du tikri lygių ekskavatoriai, betono ir grunto danga, fiziniai pasirinkimo stendai, valdymo pultas, aptvarai, konteineriai ir kūgiai. Tai erdvinė aplinka su perspektyva ir paralaksu, o ne visą vaizdą uždengiantis skydelis.
+`Menu` scenoje išsaugota 3D darbų aikštelė: du tikri lygių ekskavatoriai, betono ir grunto danga, fiziniai pasirinkimo stendai, valdymo pultas, aptvarai, konteineriai ir kūgiai. Tai erdvinė aplinka su perspektyva ir paralaksu, o ne visą vaizdą uždengiantis skydelis.
 
 Visi žaidėjui rodomi meniu tekstai yra anglų kalba, įskaitant 3D stendus, atmintinę, įkėlimo būseną ir klaidas.
 
-## Peržiūra redaktoriuje be Play
+## Redagavimas Unity redaktoriuje
 
-Pasirink `Tools > Excavator > Preview 3D Menu`. Arba pažymėk `MenuController` ir jo Inspector lange spausk `Preview 3D Menu`. Atsidaro laikina 3D aikštelės peržiūra `Scene` lange. Galima laisvai sukti kamerą ir apžiūrėti modelius. Atmintinė rodoma per `Tools > Excavator > Preview Controls Guide`.
+Atidaryk Assets/Scenes/Menu.unity. Visa aikštelė išsaugota po 3D Menu objektu ir iš karto matoma Scene lange bei Hierarchy: modeliai, stendai, tekstai, valdymo pultas ir apšvietimas. Play ar atskiros peržiūros nereikia. Objektų pozicijas ir tekstus galima keisti įprastai, po to išsaugoti sceną.
 
-Grįžk viršuje esančia etapo grįžimo rodykle arba `Tools > Excavator > Back to Scene`. Peržiūra neįrašoma į `Menu` ar kitą redaguojamą sceną ir automatiškai uždaroma prieš paleidžiant žaidimą.
+Procedūrinė geometrija, medžiagos ir šrifto atlasas išsaugoti Assets/Menu/SceneAssets. Paleidus žaidimą prijungiami mygtukų ir XR pasirinkimo veiksmai, o išsaugota aikštelė nebekuriama iš naujo. Atmintinės ir įkėlimo skydeliai scenoje išsaugoti neaktyvūs.
 
 ## Pasirinkimas
 
 Galima nukreipti VR spindulį į patį ekskavatorių ir naudoti XR pasirinkimo veiksmą arba spausti jo stendo mygtuką. Abu keliai naudoja tą patį esamą lygio `OnClick` veiksmą. Pasirinkta darbo zona paryškinama apšvietimu. Kol atverta atmintinė ar įkeliamas lygis, pradėjimo veiksmai užblokuoti.
 
-`ExcavatorMenuPresentation.immersiveYard` įjungtas meniu scenoje. Aikštelė vieną kartą orientuojama pagal pradinę žaidėjo žiūrėjimo kryptį ir lieka pasaulyje; ji neseka galvos judesių. `bucketShowcase` ir `grappleShowcase` nurodo tikrus demonstracinius modelius. Valdymo atmintinė pateikiama atskirame artimesniame skydelyje. `menuSounds` išjungia pasirinkimo garsus ir tylų erdvinį aikštelės variklio foną.
+`ExcavatorMenuPresentation.immersiveYard` įjungtas meniu scenoje. Aikštelė naudoja scenoje išsaugotas pozicijas ir nesisuka kartu su žaidėjo galva. `bucketShowcase` ir `grappleShowcase` nurodo tikrus demonstracinius modelius. Valdymo atmintinė pateikiama atskirame artimesniame skydelyje. `menuSounds` išjungia pasirinkimo garsus ir tylų erdvinį aikštelės variklio foną.
 
 ## Modeliai ir našumas
 
@@ -23,3 +23,5 @@ Galima nukreipti VR spindulį į patį ekskavatorių ir naudoti XR pasirinkimo v
 ## Patikros
 
 `ImmersiveMenuValidation.Run` tikrina tikrus modelius, skirtingą stendų gylį ir kampą, spindulio paspaudimus, pasirinkimą per 3D objektą, apšvietimo reakciją, atmintinę, blokavimą įkeliant ir scenų nuorodas. Taip pat generuojamos peržiūros `C:/Temp/VR-menu-yard.png`, `VR-menu-yard-side.png`, `VR-menu-yard-help.png` ir `VR-menu-yard-loading.png`. Renderinant Unity paleidžiamas su grafika, be `-nographics`. Galutinį VR pojūtį ir našumą reikia įvertinti su akiniais.
+
+SavedMenuValidation.Run tikrina iš naujo atidarytą išsaugotą sceną, išteklių nuorodas, lygių pasirinkimo įvykius, atmintinę ir tai, kad prijungiant valdymą nedubliuojami objektai. MenuSceneBaker.Run yra scenos autoriavimo priemonė atskiram Unity batch procesui: eksportuoja naują aikštelę į Assets/Menu/LayoutExport.unity ir užbaigia procesą. Įprastam redagavimui jos nereikia.

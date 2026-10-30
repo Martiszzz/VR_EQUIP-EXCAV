@@ -7,6 +7,17 @@ using UnityEngine.InputSystem;
 
 public class ExcavatorMenuPresentation : MonoBehaviour
 {
+    [System.Serializable]
+    class SavedLayout
+    {
+        public RectTransform root,help,loading,progress;
+        public CanvasGroup group;
+        public Button helpButton,closeHelp,quit;
+        public TMP_Text status,progressText;
+        public MenuYard yard;
+    }
+    [SerializeField] SavedLayout savedLayout;
+    public bool HasSavedLayout=>savedLayout!=null && savedLayout.root;
     public Canvas canvas;
     public Button excavation,precision;
     public Font sourceFont;
@@ -41,7 +52,13 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     void Awake(){Build();}
     IEnumerator Start()
     {
-        if(!alignWithHead){anchorReady=true;if(Yard)Yard.Reveal();yield break;}
+        if(!alignWithHead)
+        {
+            anchorReady=true;if(Yard)Yard.Reveal();
+            var initialCamera=Camera.main;
+            if(initialCamera && canvas){canvas.worldCamera=initialCamera;if(Yard){initialCamera.clearFlags=CameraClearFlags.SolidColor;initialCamera.backgroundColor=new Color(.25f,.35f,.4f);}}
+            yield break;
+        }
         yield return new WaitForSecondsRealtime(.35f);
         var camera=Camera.main;
         if(camera && canvas)
@@ -60,6 +77,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     {
         if(IsBuilt || !canvas || !excavation || !precision)return;
         controller=GetComponent<LevelMenu>();
+        if(HasSavedLayout){BindSavedLayout();return;}
         if(sourceFont){font=TMP_FontAsset.CreateFontAsset(sourceFont,48,6,UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA,1024,1024);ownsFont=font!=null;}
         if(!font)font=excavation.GetComponentInChildren<TMP_Text>(true)?.font;
         if(!font)font=TMP_Settings.defaultFontAsset;
@@ -101,6 +119,28 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         sound=gameObject.AddComponent<AudioSource>();sound.playOnAwake=false;sound.spatialBlend=0;sound.volume=.12f;sound.dopplerLevel=0;
         hoverClip=Tone("Menu focus",520,.045f);clickClip=Tone("Menu select",740,.07f);
         anchorReady=!alignWithHead || !Application.isPlaying;
+        Group.alpha=Application.isPlaying?0:1;Group.interactable=!Application.isPlaying;
+    }
+    // Called by the editor baker once; the hierarchy and resource references are then normal scene data.
+    public void SaveLayoutBindings()
+    {
+        savedLayout=new SavedLayout {root=Root,help=helpRoot,loading=loadingRoot,progress=progressFill,group=Group,helpButton=HelpButton,closeHelp=CloseHelpButton,quit=QuitButton,status=status,progressText=progressText,yard=Yard};
+        ownsFont=false;floorMaterial=null;if(Yard)Yard.SaveLayoutBindings();
+        if(Group){Group.alpha=1;Group.interactable=true;}
+    }
+    void BindSavedLayout()
+    {
+        Root=savedLayout.root;helpRoot=savedLayout.help;loadingRoot=savedLayout.loading;progressFill=savedLayout.progress;Group=savedLayout.group;
+        HelpButton=savedLayout.helpButton;CloseHelpButton=savedLayout.closeHelp;QuitButton=savedLayout.quit;status=savedLayout.status;progressText=savedLayout.progressText;Yard=savedLayout.yard;
+        IsBuilt=true;loading=false;age=0;ownsFont=false;anchorReady=!alignWithHead || !Application.isPlaying;
+        if(Yard)Yard.BindSavedLayout(this);
+        helpRoot.gameObject.SetActive(false);loadingRoot.gameObject.SetActive(false);
+        excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=true;
+        foreach(var feedback in Root.GetComponentsInChildren<MenuButtonFeedback>(true)){feedback.presentation=this;feedback.Initialize();}
+        HelpButton.onClick.AddListener(()=>ShowHelp(true));CloseHelpButton.onClick.AddListener(()=>ShowHelp(false));if(controller)QuitButton.onClick.AddListener(controller.Quit);
+        foreach(var button in new[]{excavation,precision,HelpButton,CloseHelpButton,QuitButton})button.onClick.AddListener(()=>PlayFeedback(true));
+        sound=GetComponent<AudioSource>();if(!sound)sound=gameObject.AddComponent<AudioSource>();sound.playOnAwake=false;sound.spatialBlend=0;sound.volume=.12f;
+        hoverClip=Tone("Menu focus",520,.045f);clickClip=Tone("Menu select",740,.07f);
         Group.alpha=Application.isPlaying?0:1;Group.interactable=!Application.isPlaying;
     }
     void Card(Button button,bool grapple,float x,string number,string title,string description,string badge)
