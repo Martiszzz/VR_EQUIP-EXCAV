@@ -11,6 +11,12 @@ Abiejuose lygiuose įjungtas bendras siurblys (`ExcavatorHydraulics`), judanči�
 - **Vikšrai:** kiekviena pusė turi savo sukibimą ir praslydimą. Grandinių greitis gali skirtis nuo važiuoklės greičio. Minkštame grunte žemės išstumiamos į provėžų šonus; gylis ribotas, tūris išsaugomas.
 - **Peilis:** prieš peilį formuojamas žemių pylimas, dalis medžiagos išspaudžiama per abu jo galus. Augant apkrovai didėja pasipriešinimas. Pylimas vėliau nusėda pagal grunto savybes.
 
+## Svirčių vibracija
+
+`LeverTilt` automatiškai perduoda haptinius impulsus svirtį laikančio XR interaktoriaus pulteliui. Nuo 55 % tikrosios svirties eigos trumpi impulsai palaipsniui stiprėja; pasiekus 96 % siunčiamas stipresnis vibracijos impulsas. Laikant ties riba lieka reti silpni impulsai. Riba persiginkluoja grįžus žemiau 88 %, todėl rankos drebėjimas nekartoja stiprių impulsų. Paleidus svirtį nauji impulsai nebesiunčiami.
+
+Inspector lange `LeverTilt > Controller feedback` galima keisti `Haptic Strength` (numatyta 0,75) arba išjungti `Haptics Enabled`. Vibracija naudoja esamas XR Origin kairės ir dešinės rankų haptikos nuorodas; ranka nustatoma pagal tikrą svirties paėmimą. `LeverHapticsValidation.Run` tikrina eigos stiprėjimą, galines padėtis, ribos histerezę, impulsų dažnį ir paleidimą. Galutinį stiprumą reikia išbandyti su Quest 2 pulteliais.
+
 ## Patikra
 
 Unity Editor patikras paleidžia `RealisticControlValidation.Run`. Papildomi `AdvancedSoilValidation` scenarijai tikrina skirtingo krašto pjūvį, medžiagų pasipriešinimą, nuošliaužų tūrį, dalinį išbyrėjimą, bendrą siurblį, tikrų scenų mases, peilio atramą, praslydimą, provėžas ir išstūmimą per peilio galus. VR pojūtį ir našumą reikia papildomai įvertinti pačiuose akiniuose.

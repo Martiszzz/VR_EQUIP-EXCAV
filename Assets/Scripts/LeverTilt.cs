@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using UnityEngine.XR.Interaction.Toolkit.Interactors;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 
 [DefaultExecutionOrder(100)]
 [RequireComponent(typeof(XRBaseInteractable))]
@@ -13,6 +15,11 @@ public class LeverTilt : LeverBase
     public bool invertForward, invertSide;
     public bool forwardOnly;
     public Vector3 stemAxis = Vector3.forward;
+    [Header("Controller feedback")]
+    public bool hapticsEnabled = true;
+    [Range(0f, 1f)] public float hapticStrength = 0.75f;
+    readonly LeverHapticFeedback haptics = new LeverHapticFeedback();
+    IXRSelectInteractor hapticHand;
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
     float pitch, roll, pitchVelocity, rollVelocity;
@@ -47,7 +54,24 @@ public class LeverTilt : LeverBase
         }
         else if (returnToCenter) { targetPitch = targetRoll = 0; }
         StepTilt(new Vector2(targetPitch, targetRoll), held, Time.deltaTime);
+        UpdateHaptics(held, Time.deltaTime);
     }
+    void UpdateHaptics(bool held, float dt)
+    {
+        var hand = held ? interactable.interactorsSelecting[0] : null;
+        if (!ReferenceEquals(hand, hapticHand)) { haptics.Reset(); hapticHand = hand; }
+        // Read actual smoothed travel, not the unclamped controller pose. Diagonal travel shares one circular stop.
+        float travel = new Vector2(pitch, forwardOnly ? 0 : roll).magnitude / Mathf.Max(1f, maxAngle);
+        if (!haptics.Step(travel, held && hapticsEnabled && hapticStrength > 0, dt, out var amplitude, out var duration)) return;
+        amplitude *= hapticStrength;
+        if (hand is XRBaseInputInteractor input) input.SendHapticImpulse(amplitude, duration);
+        else if (hand is Component component)
+        {
+            var player = component.GetComponentInParent<HapticImpulsePlayer>();
+            if (player) player.SendHapticImpulse(amplitude, duration);
+        }
+    }
+    void OnDisable() { haptics.Reset(); hapticHand = null; }
     public void StepTilt(Vector2 target, bool held, float dt)
     {
         if (forwardOnly) target.y = 0;
