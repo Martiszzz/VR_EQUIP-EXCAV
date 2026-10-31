@@ -10,6 +10,7 @@ public class ExcavatorMass : MonoBehaviour
     public Transform blade;
     [Min(100)] public float baseMass=1700;
     [Min(1)] public float boomMass=170,stickMass=100,toolMass=70;
+    public Vector3 baseCenterOfMassMetres=new Vector3(0,0.55f,0);
     public Vector3 CenterOfMass {get;private set;}
     public float TotalMass {get;private set;}
     public float Stability {get;private set;}=1;
@@ -22,7 +23,7 @@ public class ExcavatorMass : MonoBehaviour
     {
         if(!grounding)grounding=GetComponent<ExcavatorGrounding>();
         Vector3 center=grounding && grounding.Ready?grounding.Pivot:transform.position;
-        Vector3 baseCenter=center+transform.up*0.55f;
+        Vector3 baseCenter=center+transform.rotation*baseCenterOfMassMetres;
         TotalMass=baseMass;Vector3 moment=baseCenter*baseMass;
         if(boomPivot && stickPivot)Add((boomPivot.position+stickPivot.position)*0.5f,boomMass,ref moment);
         if(stickPivot && toolPivot)Add((stickPivot.position+toolPivot.position)*0.5f,stickMass,ref moment);

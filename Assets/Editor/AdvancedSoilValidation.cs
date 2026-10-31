@@ -23,7 +23,7 @@ public static class AdvancedSoilValidation
         {
             data=new TerrainData {heightmapResolution=129,size=new Vector3(8,4,8)};Set((x,z)=>2);
             ground=Terrain.CreateTerrainGameObject(data);ground.transform.position=new Vector3(7000,0,7000);
-            owner=new GameObject("Advanced soil test");soil=owner.AddComponent<DigSystem>();soil.terrain=ground.GetComponent<Terrain>();soil.maxBlocks=700;
+            owner=new GameObject("Advanced soil test");soil=owner.AddComponent<DigSystem>();soil.terrain=ground.GetComponent<Terrain>();soil.maxBlocks=700;soil.maxLooseBodies=700; // Retention-only fixtures do not advance falling parcel physics.
             prefab=GameObject.CreatePrimitive(PrimitiveType.Cube);prefab.transform.position=Vector3.up*100;
             soil.blockPrefab=prefab.AddComponent<DirtBlock>();soil.blockPrefab.rb=prefab.AddComponent<Rigidbody>();
             DigSystem.I=soil;
@@ -193,23 +193,7 @@ public static class AdvancedSoilValidation
                 var root=geometry.Node("1113508163246883981");root.position=new Vector3(7004,3,7003);
                 var meshes=UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Excav.fbx").OfType<Mesh>().ToArray();
                 var g=root.gameObject.AddComponent<ExcavatorGrounding>();g.terrain=w.soil.terrain;
-                if(level=="Level 1")
-                {
-                    var mesh=UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/TrackChainPath.fbx").OfType<Mesh>().First(m=>{UnityEditor.AssetDatabase.TryGetGUIDAndLocalFileIdentifier(m,out string guid,out long id);return id==-5495902117074765545L;});
-                    var template=geometry.Node("1810314630");var shoe=geometry.Node("3849000088759553841");shoe.gameObject.AddComponent<MeshFilter>().sharedMesh=mesh;shoe.gameObject.AddComponent<MeshRenderer>().sharedMaterial=SoilClodVisual.EarthMaterial;
-                    foreach(var pair in new[]{("1645427157",false),("868185390",true)})
-                    {
-                        var track=geometry.Node(pair.Item1);var chain=track.gameObject.AddComponent<TrackChain>();chain.rightSide=pair.Item2;chain.linkPrefab=template;
-                        string source=File.ReadAllText("Assets/Scenes/"+level+".unity");string component=System.Text.RegularExpressions.Regex.Match(source,@"(?ms)^--- !u!114 &"+(pair.Item2?"868185391":"1645427158")+@"\r?\n.*?(?=^--- !u!|\z)").Value;
-                        string paths=component.Substring(component.IndexOf("  path:"));paths=paths.Substring(0,paths.IndexOf("  linkPrefab:"));
-                        chain.path=System.Text.RegularExpressions.Regex.Matches(paths,@"fileID: (\d+)").Cast<System.Text.RegularExpressions.Match>().Select(m=>geometry.Node(m.Groups[1].Value)).ToArray();
-                        if(pair.Item2)g.rightTrack=track;else g.leftTrack=track;
-                    }
-                    var drive=root.gameObject.AddComponent<TrackDrive>();drive.excavator=root;
-                    var visuals=root.gameObject.AddComponent<TrackVisuals>();visuals.drive=drive;visuals.leftTrack=g.leftTrack;visuals.rightTrack=g.rightTrack;visuals.Initialize();
-                    Require(visuals.Left && visuals.Right && root.GetComponentsInChildren<TrackChain>().Length==2,"Authored tread chains are missing or duplicated");
-                }
-                else foreach(var pair in new[]{("346980961889796245",-7294526821872198993L),("1292206066633544386",-1638855797795967722L)})
+                foreach(var pair in new[]{("346980961889796245",-7294526821872198993L),("1292206066633544386",-1638855797795967722L)})
                 {
                     var track=geometry.Node(pair.Item1);var mesh=meshes.First(m=>{UnityEditor.AssetDatabase.TryGetGUIDAndLocalFileIdentifier(m,out string guid,out long id);return id==pair.Item2;});track.gameObject.AddComponent<MeshFilter>().sharedMesh=mesh;
                     if(pair.Item1=="346980961889796245")g.leftTrack=track;else g.rightTrack=track;

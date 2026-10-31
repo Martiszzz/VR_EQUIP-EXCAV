@@ -81,6 +81,7 @@ public class TrackDrive : MonoBehaviour
         Vector3 leftPoint=grounded?(grounding.SupportPoint(0)+grounding.SupportPoint(5))*0.5f:excavator.position;
         Vector3 rightPoint=grounded?(grounding.SupportPoint(6)+grounding.SupportPoint(11))*0.5f:excavator.position;
         float t = (throttle ? throttle.Power : 1f) * (grounded ? grounding.DriveFactor : 1f) * (circuit?circuit.FlowFactor:1);
+        if(grounded && DigSystem.I && grounding.terrain==DigSystem.I.terrain)t*=Mathf.Lerp(1,.35f,DigSystem.I.LastBladeLoad);
         // kiekvienas vikšras seka tik savo svirtį
         leftCmd = Approach(leftCmd, Input(leftLever.Forward) * moveSpeed * t, dt);
         rightCmd = Approach(rightCmd, Input(rightLever.Forward) * moveSpeed * t, dt);

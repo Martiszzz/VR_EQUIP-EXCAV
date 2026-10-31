@@ -20,6 +20,14 @@ public class LeverTilt : LeverBase
     [Range(0f, 1f)] public float hapticStrength = 0.75f;
     readonly LeverHapticFeedback haptics = new LeverHapticFeedback();
     IXRSelectInteractor hapticHand;
+    float hydraulicWork,workUntil,workPulse,workTick=-1;
+    public void ReportHydraulicLoad(float load)
+    {
+        // Several hydraulic axes share a grip: an idle axis must not erase another axis's load.
+        if(workTick!=Time.fixedTime){hydraulicWork=0;workTick=Time.fixedTime;}
+        hydraulicWork=Mathf.Max(hydraulicWork,Mathf.Clamp01(load));
+        if(hydraulicWork>.08f)workUntil=Time.time+.08f;
+    }
     XRBaseInteractable interactable;
     Quaternion restLocalRot;
     float pitch, roll, pitchVelocity, rollVelocity;
@@ -62,7 +70,12 @@ public class LeverTilt : LeverBase
         if (!ReferenceEquals(hand, hapticHand)) { haptics.Reset(); hapticHand = hand; }
         // Read actual smoothed travel, not the unclamped controller pose. Diagonal travel shares one circular stop.
         float travel = new Vector2(pitch, forwardOnly ? 0 : roll).magnitude / Mathf.Max(1f, maxAngle);
-        if (!haptics.Step(travel, held && hapticsEnabled && hapticStrength > 0, dt, out var amplitude, out var duration)) return;
+        bool enabled=held && hapticsEnabled && hapticStrength>0;
+        bool pulse=haptics.Step(travel,enabled,dt,out var amplitude,out var duration);
+        workPulse-=dt;
+        if(!pulse && enabled && dt>0 && workPulse<=0 && Time.time<workUntil && hydraulicWork>.08f)
+        {amplitude=Mathf.Lerp(.04f,.18f,hydraulicWork);duration=.03f;pulse=true;workPulse=.12f;}
+        if(!pulse)return;
         amplitude *= hapticStrength;
         if (hand is XRBaseInputInteractor input) input.SendHapticImpulse(amplitude, duration);
         else if (hand is Component component)
@@ -71,7 +84,7 @@ public class LeverTilt : LeverBase
             if (player) player.SendHapticImpulse(amplitude, duration);
         }
     }
-    void OnDisable() { haptics.Reset(); hapticHand = null; }
+    void OnDisable() { haptics.Reset(); hapticHand = null;hydraulicWork=workUntil=workPulse=0;workTick=-1; }
     public void StepTilt(Vector2 target, bool held, float dt)
     {
         if (forwardOnly) target.y = 0;

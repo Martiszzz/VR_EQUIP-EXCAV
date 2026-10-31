@@ -18,6 +18,12 @@ public class ExcavatorGrounding : MonoBehaviour
     [Min(0.01f)] public float stabilityMargin = 0.08f;
     [Range(1,15)] public float maxHydraulicTilt = 10;
     [Min(1)] public float hydraulicTiltSpeed = 12;
+    [Header("Hydraulic support")]
+    [Min(100)] public float maximumHydraulicForce = 18000;
+    [Range(1,2)] public float liftThreshold = 1.1f;
+    [Min(0.01f)] public float settlingDamping = 0.25f;
+    public float RequiredLiftForce {get;private set;}
+    public float AppliedLiftForce {get;private set;}
     public float HydraulicLoad { get; private set; }
     public ExcavatorMass massModel;
     int sampleCount=12;
@@ -69,7 +75,7 @@ public class ExcavatorGrounding : MonoBehaviour
         if(filter && filter.sharedMesh)bounds=MeshBounds(filter);
         else
         {
-            // Authored chain paths replace the original solid track meshes in Level 1.
+            // Optional authored chain paths can also supply a footprint without a solid mesh.
             var chain=track.GetComponent<TrackChain>();
             var shoe=chain && chain.linkPrefab?chain.linkPrefab.GetComponentInChildren<MeshFilter>(true):null;
             if(!chain || chain.path==null || chain.path.Length<3 || !shoe || !shoe.sharedMesh)return false;
@@ -196,7 +202,12 @@ public class ExcavatorGrounding : MonoBehaviour
         bool supported = Plane(true, out var normal);
         if (!supported) supported = Plane(false, out normal);
         Quaternion rotation = chassis.rotation;
-        if (supported) rotation = Rotation(chassis.rotation, Vector3.RotateTowards(chassis.up, LimitNormal(normal), tiltSpeed * Mathf.Deg2Rad * dt, 0));
+        if (supported)
+        {
+            float error=Vector3.Angle(chassis.up,LimitNormal(normal));
+            float damped=error*(1-Mathf.Exp(-dt/Mathf.Max(0.01f,settlingDamping)));
+            rotation = Rotation(chassis.rotation, Vector3.RotateTowards(chassis.up, LimitNormal(normal), Mathf.Min(tiltSpeed*dt,damped) * Mathf.Deg2Rad, 0));
+        }
         float floor = Height(rotation), y = chassis.position.y;
         if (floor > y)
         { y = Mathf.MoveTowards(y, floor, maxRiseSpeed * dt); VerticalSpeed = 0; }
@@ -239,7 +250,7 @@ public class ExcavatorGrounding : MonoBehaviour
     {
         if(dt>0)HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(volume/dt/0.012f));
     }
-    public bool TryHydraulicReaction(Vector3 tool,float depth,float dt)
+    public bool TryHydraulicReaction(Vector3 tool,float depth,float dt,float effort=1)
     {
         if(!Ready || !Ignition.EngineRunning || depth<=0 || depth>0.08f || dt<=0)return false;
         Gather(chassis.position,chassis.rotation);
@@ -255,6 +266,12 @@ public class ExcavatorGrounding : MonoBehaviour
         if(count==0)return false;pivot/=count;
         float arm=Vector3.Dot(tool-pivot,direction);
         if(arm<0.25f)return false;
+        float mass=massModel?massModel.TotalMass:1700;
+        var center=massModel?massModel.CenterOfMass:Pivot+chassis.up*0.55f;
+        // Torque balance about the grounded rear/side track edge, rather than translating the whole body upward.
+        RequiredLiftForce=mass*9.81f*Mathf.Max(0.05f,Vector3.Dot(center-pivot,direction))/arm*liftThreshold;
+        AppliedLiftForce=maximumHydraulicForce*Mathf.Clamp01(effort);
+        if(AppliedLiftForce<RequiredLiftForce)return false;
         float angle=Mathf.Min(Mathf.Asin(Mathf.Clamp01((depth+0.001f)/arm))*Mathf.Rad2Deg,hydraulicTiltSpeed*dt);
         Quaternion turn=Quaternion.AngleAxis(angle,Vector3.Cross(direction,Vector3.up));
         Quaternion rotation=turn*chassis.rotation;

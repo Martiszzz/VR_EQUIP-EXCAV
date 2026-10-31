@@ -34,7 +34,8 @@ public static class RealisticControlValidation
             TerrainDriveValidation.Check();
             ExcavatorPhysicsValidation.Check();
             AdvancedSoilValidation.Check();
-            Debug.Log("REALISTIC CONTROLS PASS: restart, idle power, track lever limits, thumbstick, ground contact, extended digging and conserved pushing.");
+            SoilInteractionValidation.Check();
+            Debug.Log("REALISTIC CONTROLS PASS: restart, idle power, track lever limits, thumbstick, ground contact, extended digging, conserved pushing, heaped cargo, physics budget, force-limited support and both scenes' contact integration.");
             EditorApplication.Exit(0);
         }
         catch (Exception error) { Debug.LogException(error); EditorApplication.Exit(1); }

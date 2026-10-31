@@ -4,9 +4,9 @@ using UnityEngine.Rendering;
 // One bounded particle system per bucket; grain collisions do not duplicate terrain volume.
 public class SandFlow : MonoBehaviour
 {
-    [Range(8, 120)] public int grainsPerChunk = 80;
+    [Range(8, 120)] public int grainsPerChunk = 24;
     [Min(0.001f)] public float grainSize = 0.006f;
-    [Range(200, 3000)] public int particleBudget = 2400;
+    [Range(200, 3000)] public int particleBudget = 600;
     ParticleSystem grains;
     Material material;
     Mesh mesh;
@@ -44,10 +44,10 @@ public class SandFlow : MonoBehaviour
         collision.enabled = true;
         collision.type = ParticleSystemCollisionType.World;
         collision.mode = ParticleSystemCollisionMode.Collision3D;
-        collision.quality = ParticleSystemCollisionQuality.Medium;
+        collision.quality = ParticleSystemCollisionQuality.Low;
         collision.collidesWith = ~0;
-        collision.enableDynamicColliders = true;
-        collision.maxCollisionShapes = 128;
+        collision.enableDynamicColliders = false;
+        collision.maxCollisionShapes = 16;
         collision.bounce = 0;
         collision.lifetimeLoss = 1f;
         collision.dampen = 0.65f;

@@ -52,7 +52,7 @@ public static class BucketGroundValidation
 
             lever.Forward = 1;
             for (int i = 0; i < 30; i++) driver.Step(0.02f);
-            Require(driver.Angle > 40 && bucket.GroundPenetration(system) == 0, "Empty bucket cannot enter diggable soil");
+            Require(driver.Angle > 0 && driver.Angle < 40 && bucket.GroundPenetration(system) <= 0.012f, "Empty bucket without a cutting tooth passes through terrain");
             arm.localRotation = Quaternion.identity;
             driver.Initialize();
             Require(bucket.TryGetSpawnPosition(system.blockSize, out var position), "Test bucket cannot accept soil");

@@ -4,6 +4,9 @@ using UnityEngine;
 public partial class DigSystem
 {
     public SoilKind surfaceSoil = SoilKind.Loam;
+    public SoilMaterialProfile[] soilMaterials;
+    public Transform simulationObserver;
+    [Min(5)] public float activeSoilDistance=30;
     public bool depthLayers = true;
     [Min(0.05f)] public float clayDepth = 0.25f, compactedDepth = 0.7f;
     public bool simulateSlopes = true, makeTrackRuts = true;
@@ -12,6 +15,7 @@ public partial class DigSystem
     const int TileSize=16;
     readonly Queue<int> soilQueue=new Queue<int>();
     readonly Dictionary<int,int> soilLife=new Dictionary<int,int>();
+    readonly Dictionary<int,SoilKind> depositedMaterials=new Dictionary<int,SoilKind>();
     int slidePhase;
     public float ActiveVolume {get {float volume=0;foreach(var clod in active)if(clod && clod.gameObject.activeSelf)volume+=clod.Volume;return volume;}}
     public int ActiveSoilTiles=>soilLife.Count;
@@ -23,13 +27,23 @@ public partial class DigSystem
         RememberSoilSurface();var td=terrain.terrainData;var p=point-terrain.transform.position;int r=td.heightmapResolution;
         float x=Mathf.Clamp(p.x/td.size.x*(r-1),0,r-1),z=Mathf.Clamp(p.z/td.size.z*(r-1),0,r-1);
         int ix=Mathf.Min(r-2,(int)x),iz=Mathf.Min(r-2,(int)z);
-        return terrain.transform.position.y+td.size.y*Mathf.Lerp(Mathf.Lerp(pushBaseHeights[iz,ix],pushBaseHeights[iz,ix+1],x-ix),Mathf.Lerp(pushBaseHeights[iz+1,ix],pushBaseHeights[iz+1,ix+1],x-ix),z-iz);
+        return terrain.transform.position.y+td.size.y*TriangleHeight(pushBaseHeights,ix,iz,x-ix,z-iz);
     }
     public SoilKind KindAt(Vector3 point)
     {
         for(int i=SoilRegion.Active.Count-1;i>=0;i--)if(SoilRegion.Active[i] && SoilRegion.Active[i].Contains(point))return SoilRegion.Active[i].kind;
         if(!ContainsTerrainPoint(point))return surfaceSoil;
         float depth=OriginalSurfaceY(point)-point.y;
+        var local=point-terrain.transform.position;var cell=terrain.terrainData.heightmapScale;
+        return KindAtDepth(depth,(int)(local.x/cell.x),(int)(local.z/cell.z));
+    }
+    SoilKind KindAtDepth(float depth,int x,int z)
+    {
+        if(depth<-.025f)
+        {
+            int tiles=(terrain.terrainData.heightmapResolution-2)/TileSize+1;
+            if(depositedMaterials.TryGetValue(x/TileSize+z/TileSize*tiles,out var kind))return kind;
+        }
         return KindByDepth(depth);
     }
     SoilKind KindByDepth(float depth)
@@ -39,7 +53,12 @@ public partial class DigSystem
         if(depthLayers && depth>clayDepth)return SoilKind.Clay;
         return surfaceSoil;
     }
-    public SoilProperties SoilAt(Vector3 point)=>SoilProperties.For(KindAt(point));
+    public SoilProperties PropertiesFor(SoilKind kind)
+    {
+        if(soilMaterials!=null)foreach(var profile in soilMaterials)if(profile && profile.kind==kind)return profile.Properties;
+        return SoilProperties.For(kind);
+    }
+    public SoilProperties SoilAt(Vector3 point)=>PropertiesFor(KindAt(point));
     public void Disturb(Vector3 point,float radius)
     {
         if(!simulateSlopes || !ContainsTerrainPoint(point))return;
@@ -61,6 +80,14 @@ public partial class DigSystem
         for(int n=0;n<count;n++)
         {
             int key=soilQueue.Dequeue();int life=soilLife[key]-1;soilLife.Remove(key);
+            if(simulationObserver)
+            {
+                int tiles=(terrain.terrainData.heightmapResolution-2)/TileSize+1;
+                var scale=terrain.terrainData.heightmapScale;
+                var center=terrain.transform.position+new Vector3((key%tiles+.5f)*TileSize*scale.x,0,(key/tiles+.5f)*TileSize*scale.z);
+                var delta=Vector3.ProjectOnPlane(center-simulationObserver.position,Vector3.up);
+                if(delta.sqrMagnitude>activeSoilDistance*activeSoilDistance){Wake(key,life+1);continue;}
+            }
             bool moving=RelaxTile(key,Mathf.Min(dt,0.1f));
             if(moving && life>0)Wake(key,life);
         }
@@ -71,7 +98,7 @@ public partial class DigSystem
         RememberSoilSurface();
         var td=terrain.terrainData;int r=td.heightmapResolution,tiles=(r-2)/TileSize+1;
         int tx=key%tiles,tz=key/tiles,x0=Mathf.Max(0,tx*TileSize-1),z0=Mathf.Max(0,tz*TileSize-1);
-        int w=Mathf.Min(r-x0,TileSize+3),h=Mathf.Min(r-z0,TileSize+3);var heights=td.GetHeights(x0,z0,w,h);
+        int w=Mathf.Min(r-x0,TileSize+3),h=Mathf.Min(r-z0,TileSize+3);using var patch=EditHeights(x0,z0,w,h);var heights=patch.Heights;
         var scale=td.heightmapScale;var origin=terrain.transform.position;bool moved=false;
         // Pair transfers are equal and opposite. Alternating order avoids a preferred downhill direction.
         for(int pass=0;pass<2;pass++)
@@ -83,7 +110,7 @@ public partial class DigSystem
         }
         slidePhase++;
         if(!moved)return false;
-        td.SetHeightsDelayLOD(x0,z0,heights);terrainDirty=true;
+        patch.Apply();terrainDirty=true;
         var center=origin+new Vector3((x0+w*0.5f)*scale.x,0,(z0+h*0.5f)*scale.z);
         PaintDumped(center,Mathf.Max(w*scale.x,h*scale.z)*0.75f,1);
         // Allow a slide to cross tile boundaries, without simulating the rest of the landscape.
@@ -101,10 +128,10 @@ public partial class DigSystem
         float difference=(h[az,ax]-h[bz,bx])*scale.y;
         if(Mathf.Abs(difference)<0.005f)return false;
         int sx=difference>0?ax:bx,sz=difference>0?az:bz,dx=difference>0?bx:ax,dz=difference>0?bz:az;
-        var point=origin+new Vector3((x0+sx)*scale.x,h[sz,sx]*scale.y,(z0+sz)*scale.z);var kind=KindByDepth((pushBaseHeights[z0+sz,x0+sx]-h[sz,sx])*scale.y);
+        var point=origin+new Vector3((x0+sx)*scale.x,h[sz,sx]*scale.y,(z0+sz)*scale.z);var kind=KindAtDepth((pushBaseHeights[z0+sz,x0+sx]-h[sz,sx])*scale.y,x0+sx,z0+sz);
         for(int region=SoilRegion.Active.Count-1;region>=0;region--)
             if(SoilRegion.Active[region] && SoilRegion.Active[region].Contains(point)){kind=SoilRegion.Active[region].kind;break;}
-        var soil=SoilProperties.For(kind);
+        var soil=PropertiesFor(kind);
         float excess=Mathf.Abs(difference)-Mathf.Tan(soil.repose*Mathf.Deg2Rad)*distance-soil.cohesion;
         if(excess<=0.002f)return false;
         float transfer=Mathf.Min(excess*0.25f,soilSlideSpeed*dt/(1+soil.adhesion*3))/scale.y;

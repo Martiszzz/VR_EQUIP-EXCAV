@@ -11,6 +11,10 @@ public class ExcavatorHydraulics : MonoBehaviour
     ExcavatorGrounding grounding;
     public float Demand {get;private set;}
     public float FlowFactor {get;private set;}=1;
+    public float InertiaFactor
+    {
+        get {var mass=grounding?grounding.massModel:null;return mass && mass.bucket?1/(1+mass.bucket.HeldMass/Mathf.Max(1,mass.toolMass)*.6f):1;}
+    }
     void Awake(){Refresh();}
     public void Refresh(){actuators=GetComponentsInChildren<PartDriver>();tracks=GetComponentInChildren<TrackDrive>();grounding=GetComponent<ExcavatorGrounding>();}
     void FixedUpdate(){Step();}
@@ -26,6 +30,8 @@ public class ExcavatorHydraulics : MonoBehaviour
     {
         float reach=grounding?Vector3.Distance(grounding.Pivot,actuator.position):1;
         float leverage=1+Mathf.Max(0,reach-1.5f)*0.22f;
-        return Mathf.Clamp01(maximumPressure/(Mathf.Max(1,resistance)*leverage));
+        var mass=grounding?grounding.massModel:null;
+        float cargo=mass && mass.bucket?mass.bucket.HeldMass/Mathf.Max(1,mass.toolMass):0;
+        return Mathf.Clamp01(maximumPressure/(Mathf.Max(1,resistance)*leverage)) / (1+cargo*0.45f);
     }
 }

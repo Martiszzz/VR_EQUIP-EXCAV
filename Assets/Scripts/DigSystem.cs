@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public partial class DigSystem : MonoBehaviour
@@ -7,8 +7,12 @@ public partial class DigSystem : MonoBehaviour
     public Terrain terrain;
     public DirtBlock blockPrefab;
     public BucketInside bucket;
+    public SoilWorkFeedback feedback;
     [Min(0.01f)] public float blockSize = 0.06f;
     [Min(1)] public int maxBlocks = 250;
+    [Range(8,64)] public int maxLooseBodies = 32;
+    public int LooseBodyCount {get {int count=0;foreach(var block in active)if(block && block.gameObject.activeSelf && !block.IsHeld)count++;return count;}}
+    public int AvailableLooseBodies => Mathf.Max(0,maxLooseBodies-LooseBodyCount);
     readonly Queue<DirtBlock> pool = new Queue<DirtBlock>();
     readonly HashSet<DirtBlock> active = new HashSet<DirtBlock>();
     TerrainData original, runtimeData;
@@ -17,6 +21,10 @@ public partial class DigSystem : MonoBehaviour
     bool terrainDirty, paintDirty;
     Vector2 paintMin, paintMax;
     float terrainSyncClock;
+    readonly Queue<int> paintQueue=new Queue<int>();
+    readonly HashSet<int> pendingPaint=new HashSet<int>();
+    float[,,] paintTile;
+    [Range(1,8)] public int paintTilesPerFlush=2;
     void FixedUpdate()
     {
         terrainSyncClock += Time.fixedDeltaTime;
@@ -25,9 +33,10 @@ public partial class DigSystem : MonoBehaviour
     public void FlushTerrainChanges()
     {
         if (!terrain || !terrain.terrainData) return;
-        if (terrainDirty) terrain.terrainData.SyncHeightmap();
+        if (terrainDirty)
+        {writingHeights=true;try{terrain.terrainData.SyncHeightmap();}finally{writingHeights=false;}}
         terrainDirty = false;
-        if (paintDirty) { PaintChangedSurface(); paintDirty = false; }
+        if (paintDirty || paintQueue.Count>0) { PaintChangedSurface(); paintDirty = false; }
     }
     public float BlockVolume => blockSize * blockSize * blockSize;
     void RememberSoilSurface()
@@ -60,7 +69,7 @@ public partial class DigSystem : MonoBehaviour
     }
     public float PushAttachmentSoil(GroundedAttachment attachment, Vector3 motion, float maxDepth = 0.12f)
     {
-        if(!attachment || !Ignition.EngineRunning || Vector3.ProjectOnPlane(motion,Vector3.up).magnitude < Mathf.Abs(motion.y)*0.25f) return 0;
+        if(!attachment || !attachment.canPushSoil || !Ignition.EngineRunning || Vector3.ProjectOnPlane(motion,Vector3.up).magnitude < Mathf.Abs(motion.y)*0.25f) return 0;
         return PushToolSoil(attachment.transform.localToWorldMatrix,attachment.WorkBounds,motion,maxDepth,true,true);
     }
     float PushToolSoil(Matrix4x4 frame, Bounds work, Vector3 motion, float maxDepth, bool grading, bool blade = false)
@@ -87,8 +96,8 @@ public partial class DigSystem : MonoBehaviour
         int z0 = Mathf.Clamp(Mathf.FloorToInt((bounds.min.z - origin.z) / cell.z) - 1, 0, res - 1);
         int x1 = Mathf.Clamp(Mathf.CeilToInt((bounds.max.x - origin.x) / cell.x) + 1, 0, res - 1);
         int z1 = Mathf.Clamp(Mathf.CeilToInt((bounds.max.z - origin.z) / cell.z) + 1, 0, res - 1);
-        var heights = td.GetHeights(x0, z0, x1 - x0 + 1, z1 - z0 + 1);
-        var cuts = new float[z1 - z0 + 1, x1 - x0 + 1];
+        using var patch=EditHeights(x0,z0,x1-x0+1,z1-z0+1);
+        var heights=patch.Heights;var cuts=patch.Scratch;
         var inverse = frame.inverse;
         var up = inverse.MultiplyVector(Vector3.up);
         var low = work.min;
@@ -130,7 +139,8 @@ public partial class DigSystem : MonoBehaviour
             deposited+=Add(edge-side*(width*0.5f+sideRadius),sideRadius,displaced*sideFraction*0.5f,true);
             deposited+=FillLowSpots(destination,radius,bounds.min.y+0.003f,displaced-deposited);
             deposited+=Add(destination+direction*radius*0.75f,radius,displaced-deposited,true);
-            LastBladeLoad=Mathf.Clamp01(displaced/Mathf.Max(0.0001f,horizontal.magnitude*width*0.15f));
+            float resistance=SoilAt(new Vector3(bounds.center.x,SurfaceY(bounds.center),bounds.center.z)).resistance;
+            LastBladeLoad=Mathf.Clamp01(displaced*resistance/Mathf.Max(0.0001f,horizontal.magnitude*width*0.15f));
         }
         else
         {
@@ -141,7 +151,7 @@ public partial class DigSystem : MonoBehaviour
         float ratio = Mathf.Clamp01(deposited / displaced);
         for (int z = 0; z < heights.GetLength(0); z++)
         for (int x = 0; x < heights.GetLength(1); x++) heights[z, x] -= cuts[z, x] * ratio;
-        td.SetHeightsDelayLOD(x0, z0, heights);
+        patch.Apply();
         terrainDirty = true;
         Disturb(bounds.center,Mathf.Max(bounds.extents.x,bounds.extents.z)+Mathf.Max(cell.x,cell.z));
         PaintDumped(bounds.center, Mathf.Max(bounds.extents.x, bounds.extents.z), 1);
@@ -152,8 +162,8 @@ public partial class DigSystem : MonoBehaviour
         if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0;
         var td = terrain.terrainData;
-        var heights = td.GetHeights(x0, z0, w, h);
-        var needed = new float[h, w];
+        using var patch=EditHeights(x0,z0,w,h);
+        var heights=patch.Heights;var needed=patch.Scratch;
         float target = Mathf.Clamp01((gradeY - terrain.transform.position.y) / td.size.y), sum = 0;
         for (int z = 0; z < h; z++)
         for (int x = 0; x < w; x++)
@@ -170,7 +180,7 @@ public partial class DigSystem : MonoBehaviour
             heights[z, x] += needed[z, x] * ratio;
             added += heights[z, x] - before;
         }
-        td.SetHeightsDelayLOD(x0, z0, heights); terrainDirty = true;
+        patch.Apply(); terrainDirty = true;
         Disturb(point,radius);
         PaintDumped(point, radius, 1);
         return Mathf.Min(volume, added * td.size.y * CellArea);
@@ -193,7 +203,7 @@ public partial class DigSystem : MonoBehaviour
         }
         return true;
     }
-    public bool CanSpawn => FreeBlocks > 0 && blockPrefab;
+    public bool CanSpawn => FreeBlocks > 0 && AvailableLooseBodies>0 && blockPrefab;
     float CellArea => terrain.terrainData.heightmapScale.x * terrain.terrainData.heightmapScale.z;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -207,6 +217,7 @@ public partial class DigSystem : MonoBehaviour
             return;
         }
         I = this;
+        if(!simulationObserver && Camera.main)simulationObserver=Camera.main.transform;
         original = terrain.terrainData;
         runtimeData = Instantiate(original);
         terrain.terrainData = runtimeData;
@@ -217,6 +228,7 @@ public partial class DigSystem : MonoBehaviour
     }
     void OnDestroy()
     {
+        StopObservingHeights();
         if (I == this) I = null;
         if (!runtimeData) return;
         if (terrain)
@@ -256,17 +268,27 @@ public partial class DigSystem : MonoBehaviour
         int z0=Mathf.Clamp(Mathf.FloorToInt((paintMin.y-origin.z)/td.size.z*r),0,r-1);
         int x1=Mathf.Clamp(Mathf.CeilToInt((paintMax.x-origin.x)/td.size.x*r),0,r-1);
         int z1=Mathf.Clamp(Mathf.CeilToInt((paintMax.y-origin.z)/td.size.z*r),0,r-1);
-        var maps=td.GetAlphamaps(x0,z0,x1-x0+1,z1-z0+1);
-        for(int z=0;z<maps.GetLength(0);z++)for(int x=0;x<maps.GetLength(1);x++)
+        int tileSize=Mathf.Min(32,r),tiles=r/tileSize;
+        if(paintDirty)
+            for(int tz=z0/tileSize;tz<=z1/tileSize;tz++)for(int tx=x0/tileSize;tx<=x1/tileSize;tx++)
+            {int key=tx+tz*tiles;if(pendingPaint.Add(key))paintQueue.Enqueue(key);}
+        if(paintTile==null || paintTile.GetLength(0)!=tileSize)paintTile=new float[tileSize,tileSize,2];
+        int count=Mathf.Min(paintTilesPerFlush,paintQueue.Count);
+        for(int n=0;n<count;n++)
         {
-            float u=(x0+x+0.5f)/r,v=(z0+z+0.5f)/r;
-            float hx=u*(hr-1),hz=v*(hr-1);int ix=Mathf.Min(hr-2,(int)hx),iz=Mathf.Min(hr-2,(int)hz);
-            float original=Mathf.Lerp(Mathf.Lerp(pushBaseHeights[iz,ix],pushBaseHeights[iz,ix+1],hx-ix),Mathf.Lerp(pushBaseHeights[iz+1,ix],pushBaseHeights[iz+1,ix+1],hx-ix),hz-iz)*td.size.y;
-            float changed=Mathf.Abs(td.GetInterpolatedHeight(u,v)-original);
-            float dark=Mathf.SmoothStep(0,0.85f,Mathf.InverseLerp(0.003f,0.05f,changed));
-            maps[z,x,1]=dark; maps[z,x,0]=1-dark;
+            int key=paintQueue.Dequeue();pendingPaint.Remove(key);int px=key%tiles*tileSize,pz=key/tiles*tileSize;
+            for(int z=0;z<tileSize;z++)for(int x=0;x<tileSize;x++)
+            {
+                float u=(px+x+0.5f)/r,v=(pz+z+0.5f)/r;
+                float hx=u*(hr-1),hz=v*(hr-1);int ix=Mathf.Min(hr-2,(int)hx),iz=Mathf.Min(hr-2,(int)hz);
+                float original=TriangleHeight(pushBaseHeights,ix,iz,hx-ix,hz-iz)*td.size.y;
+                // Paint the rendered terrain's interpolation, not the contact grid's interpolation at a sharp rim.
+                float changed=Mathf.Abs(td.GetInterpolatedHeight(u,v)-original);
+                float dark=Mathf.SmoothStep(0,0.85f,Mathf.InverseLerp(0.003f,0.05f,changed));
+                paintTile[z,x,1]=dark;paintTile[z,x,0]=1-dark;
+            }
+            td.SetAlphamaps(px,pz,paintTile);
         }
-        td.SetAlphamaps(x0,z0,maps);
     }
 
     public bool ContainsTerrainPoint(Vector3 point)
@@ -275,7 +297,7 @@ public partial class DigSystem : MonoBehaviour
         Vector3 local = point - terrain.transform.position, size = terrain.terrainData.size;
         return local.x >= 0 && local.z >= 0 && local.x <= size.x && local.z <= size.z;
     }
-    public float SurfaceY(Vector3 point) => terrain.SampleHeight(point) + terrain.transform.position.y;
+    public float SurfaceY(Vector3 point) => CachedSurfaceY(point);
 
     bool GetWindow(Vector3 world, float radius, out int x0, out int z0, out int w, out int h,
         out float cx, out float cz, out float rx, out float rz)
@@ -309,8 +331,8 @@ public partial class DigSystem : MonoBehaviour
             out int w, out int h, out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
         RememberSoilSurface();
-        var heights = td.GetHeights(x0, z0, w, h);
-        var cuts = new float[h, w];
+        using var patch=EditHeights(x0,z0,w,h);
+        var heights=patch.Heights;var cuts=patch.Scratch;
         float sum = 0;
         float floor = Mathf.Max(0, (floorY - terrain.transform.position.y) / td.size.y);
         for (int z = 0; z < h; z++)
@@ -332,18 +354,19 @@ public partial class DigSystem : MonoBehaviour
                 heights[z, x] -= cuts[z, x] * ratio;
                 removed += before - heights[z, x];
             }
-        td.SetHeights(x0, z0, heights);
+        patch.Apply();
         if (removed > 0f) {Disturb(point,radius); PaintDumped(point, radius * 1.1f, 1f);}
         return removed * td.size.y * CellArea;
     }
     // Return the accepted volume so a saturated terrain never silently deletes soil.
-    public float Add(Vector3 point, float radius, float volume, bool deferUpdates = false)
+    public float Add(Vector3 point, float radius, float volume, bool deferUpdates = false, SoilKind? material = null)
     {
         if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
         RememberSoilSurface();
-        var heights = td.GetHeights(x0, z0, w, h);
+        using var patch=EditHeights(x0,z0,w,h);
+        var heights=patch.Heights;
         float remaining = volume / (td.size.y * CellArea), accepted = 0;
         // Redistribute overflow among cells still below the maximum height.
         for (int pass = 0; pass < w * h && remaining > 0.00000001f; pass++)
@@ -370,11 +393,21 @@ public partial class DigSystem : MonoBehaviour
         }
         if (deferUpdates)
         {
-            td.SetHeightsDelayLOD(x0, z0, heights);
+            patch.Apply();
             terrainDirty = true;
         }
-        else td.SetHeights(x0, z0, heights);
-        if (accepted > 0f) {Disturb(point,radius); PaintDumped(point, radius * 1.3f, 0.5f);}
+        else patch.Apply();
+        if (accepted > 0f)
+        {
+            // Coarse material tiles bound memory independently of the number of falling parcels.
+            if(material.HasValue)
+            {
+                int tiles=(td.heightmapResolution-2)/TileSize+1;
+                for(int z=0;z<h;z++)for(int x=0;x<w;x++)if(heights[z,x]>patch.Original[z,x]+1e-7f)
+                    depositedMaterials[(x0+x)/TileSize+(z0+z)/TileSize*tiles]=material.Value;
+            }
+            Disturb(point,radius); PaintDumped(point, radius * 1.3f, 0.5f);
+        }
         return Mathf.Min(volume, accepted * td.size.y * CellArea);
     }
     public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0, SoilKind kind = SoilKind.Loam)

@@ -39,7 +39,12 @@ public class PartDriver : MonoBehaviour
         circuit=target?target.GetComponentInParent<ExcavatorHydraulics>():null;
         angle = angularVelocity = 0;
     }
-    void FixedUpdate() { Step(Time.fixedDeltaTime); }
+    void FixedUpdate()
+    {
+        Step(Time.fixedDeltaTime);
+        if(lever is LeverTilt grip)grip.ReportHydraulicLoad(HydraulicLoad);
+        else if(lever is FingerStick thumb && thumb.gripLever)thumb.gripLever.ReportHydraulicLoad(HydraulicLoad);
+    }
     public void Step(float deltaTime)
     {
         if (!lever || !target || deltaTime <= 0) return;
@@ -49,6 +54,7 @@ public class PartDriver : MonoBehaviour
         HydraulicLoad = Mathf.MoveTowards(HydraulicLoad,0,deltaTime*1.5f);
         float desired = v * speed * (throttle ? throttle.Power : 1f) * Mathf.Lerp(1,0.55f,HydraulicLoad) * (circuit ? circuit.FlowFactor*circuit.ForceFactor(target,cuttingResistance) : 1);
         float rate = Mathf.Abs(desired) < Mathf.Abs(angularVelocity) || desired * angularVelocity < 0 ? braking : acceleration;
+        rate*=circuit?circuit.InertiaFactor:1;
         if (limit)
         {
             float remaining = desired >= 0 ? maxAngle - angle : angle - minAngle;
@@ -63,7 +69,7 @@ public class PartDriver : MonoBehaviour
             if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
         }
         float from = angle;
-        int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(next - from) / 0.25f), 1, 64);
+        int steps = probe!=null?probe.MotionSteps(next-from):Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(next-from)/.25f),1,64);
         for (int i = 1; i <= steps; i++)
         {
             float candidate = Mathf.Lerp(from, next, i / (float)steps);
@@ -91,7 +97,7 @@ public class PartDriver : MonoBehaviour
         cuttingResistance=probe.CuttingResistance;
         float groundAfter = probe.GroundDepth();
         if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
-        if(after<=probe.Tolerance && probe.ReactToGround(dt)) {HydraulicLoad=1;return true;}
+        if(after<=probe.Tolerance && probe.ReactToGround(dt,RequestedFlow*(throttle?throttle.Power:1))) {HydraulicLoad=1;return true;}
         if(groundAfter>probe.Tolerance)HydraulicLoad=1;
         Quaternion moved = target.localRotation;
         target.localRotation = old;

@@ -58,7 +58,7 @@ public class DigTeeth : MonoBehaviour
         if (distance <= 0.000001f || distance > maxSweepDistance) return;
         s.bucket.GradingContact = !closingCurl && (!CanCut(s.bucket, motion) || IsBackDragging(s.bucket, motion));
         int slots = Mathf.Min(s.bucket.FreeSlots(s.blockSize), s.FreeBlocks);
-        float budget = Mathf.Max(0f, slots * s.BlockVolume - carry);
+        float budget = s.CanSpawn?Mathf.Max(0f,slots*s.BlockVolume-carry):0;
         if (budget <= 0f || s.bucket.GradingContact)
         {
             LastWorkVolume = s.PushBucketSoil(s.bucket, motion, maxPushDepth);
@@ -83,7 +83,7 @@ public class DigTeeth : MonoBehaviour
                 if(penetration<=0.005f)continue;
                 var soil=s.SoilAt(point);carriedKind=s.KindAt(point);
                 float attack=Mathf.Lerp(0.65f,1,Mathf.Clamp01(Vector3.Dot(motion.normalized,s.bucket.transform.TransformDirection(s.bucket.lipAxis.normalized))));
-                float resistance=soil.resistance*(1+Mathf.Clamp01(penetration/0.25f))*1/attack;
+                float resistance=soil.resistance*(1+Mathf.Clamp01(penetration/0.25f))*(1+Mathf.Clamp(stroke/Mathf.Max(dt,0.001f),0,3)*0.25f)/attack;
                 LastResistance=Mathf.Max(LastResistance,resistance);
                 float depth=Mathf.Min(penetration,maxDepthPerStep,stroke/steps*cutPerMeter)/Mathf.Max(0.5f,resistance);
                 float removed=s.Dig(point,toothRadius,depth,budget,point.y);

@@ -14,6 +14,15 @@ public class BucketInside : MonoBehaviour
     [Min(1f)] public float flowAcceleration = 200f;
     [Range(0.06f, 0.2f)] public float batchInterval = 0.08f;
     [Range(2, 8)] public int maxBatchSize = 6;
+    [Min(0.005f)] public float maximumToothPenetration = 0.045f;
+    [Header("Bulk volume (mÂ³)")]
+    [Tooltip("Zero calibrates capacity from the existing cargo box and parcel limit.")]
+    [Min(0)] public float ratedCapacityCubicMetres;
+    [Range(0,0.3f)] public float heapedFraction = 0.15f;
+    [Min(0.001f)] public float dischargeCubicMetresPerSecond = 0.014f;
+    [SerializeField] float currentVolumeCubicMetres;
+    float heldMass, loadAdhesion;
+    DigTeeth cuttingTeeth;
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
     BoxCollider[] shell;
@@ -52,12 +61,15 @@ public class BucketInside : MonoBehaviour
     public SandFlow Sand => sand;
     public BucketSoilFill Fill => fill;
     public int CapturedCount => captured.Count;
-    public float HeldVolume { get { float total = 0; foreach(var clod in captured) if(clod && clod.gameObject.activeSelf) total += clod.Volume; return total; } }
+    public float HeldVolume => currentVolumeCubicMetres;
+    public float MaximumVolume => SlotCapacity(chunkSize)*Mathf.Pow(chunkSize,3);
+    public float RatedCapacity => ratedCapacityCubicMetres>0 ? ratedCapacityCubicMetres : MaximumVolume/(1+heapedFraction);
+    public float RatedFill => HeldVolume/Mathf.Max(0.000001f,RatedCapacity);
     public Vector2 LoadOffset {get;private set;}
     public Vector2 LoadSlope {get;private set;}
     Vector2 slideVelocity;
-    public float HeldMass {get {float mass=0;foreach(var clod in captured)if(clod)mass+=clod.Volume*SoilProperties.For(clod.Kind).density;return mass;}}
-    public float LoadAdhesion {get {float amount=0,total=0;foreach(var clod in captured)if(clod){amount+=clod.Volume*SoilProperties.For(clod.Kind).adhesion;total+=clod.Volume;}return total>0?amount/total:0;}}
+    public float HeldMass => heldMass;
+    public float LoadAdhesion => loadAdhesion;
     public Vector3 SoilCenterOfMass
     {
         get {if(!volume)volume=GetComponent<BoxCollider>();var p=volume.center+new Vector3(LoadOffset.x*volume.size.x,LoadOffset.y*volume.size.y,-volume.size.z*(0.5f-FillFraction*0.35f));return transform.TransformPoint(p);}
@@ -97,13 +109,19 @@ public class BucketInside : MonoBehaviour
         }
     }
     public bool IsFull => FreeSlots(chunkSize) == 0;
-    public float GroundPenetration(DigSystem system, bool allowCutting = true)
+    public float GroundPenetration(DigSystem system, bool allowCutting = true) => GroundPenetration(system,allowCutting,out _);
+    public float GroundPenetration(DigSystem system,bool allowCutting,out Vector3 contact)
     {
-        if (!system || system.bucket != this || !system.terrain ||
-            (allowCutting && FreeSlots(system.blockSize) > 0 && system.CanSpawn && !IsDumping && !GradingContact && Ignition.EngineRunning)) return 0;
+        contact=transform.position;
+        if (!system || system.bucket != this || !system.terrain) return 0;
+        if(!cuttingTeeth)cuttingTeeth=GetComponentInParent<DigTeeth>();
+        bool cutting = allowCutting && FreeSlots(system.blockSize) > 0 && system.CanSpawn &&
+            cuttingTeeth && !IsDumping && !GradingContact && Ignition.EngineRunning;
+        // Capacity permits a shallow cutting envelope, never unlimited terrain penetration.
+        float allowance = cutting ? maximumToothPenetration : 0;
         if (!volume) volume = GetComponent<BoxCollider>();
         var work = WorkBounds;
-        float depth = 0;
+        float depth = 0;int contactCount=0;
         // Sample the oriented bucket volume, including the floor, sides and lip.
         // This also reads newly dug/deposited heights before the terrain collider syncs.
         for (int x = -2; x <= 2; x++)
@@ -112,11 +130,19 @@ public class BucketInside : MonoBehaviour
         {
             if (Mathf.Abs(x) < 2 && Mathf.Abs(y) < 2 && Mathf.Abs(z) < 2) continue;
             var p = transform.TransformPoint(work.center + Vector3.Scale(work.size * 0.25f, new Vector3(x, y, z)));
-            if (system.ContainsTerrainPoint(p)) depth = Mathf.Max(depth, system.SurfaceY(p) - p.y);
+            if(system.ContainsTerrainPoint(p))
+                ConsiderGround(system,p,ref depth,ref contact,ref contactCount);
         }
         if (pourPoint && system.ContainsTerrainPoint(pourPoint.position))
-            depth = Mathf.Max(depth, system.SurfaceY(pourPoint.position) - pourPoint.position.y);
-        return depth;
+            ConsiderGround(system,pourPoint.position,ref depth,ref contact,ref contactCount);
+        return Mathf.Max(0, depth - allowance);
+    }
+    static void ConsiderGround(DigSystem soil,Vector3 point,ref float depth,ref Vector3 contact,ref int count)
+    {
+        float candidate=soil.SurfaceY(point)-point.y;
+        if(candidate>depth+.0001f){depth=candidate;contact=point;count=1;}
+        else if(candidate>0 && Mathf.Abs(candidate-depth)<=.0001f)
+        {depth=Mathf.Max(depth,candidate);contact+=(point-contact)/++count;}
     }
     void Awake()
     {
@@ -138,7 +164,9 @@ public class BucketInside : MonoBehaviour
         Vector3 world = Vector3.Scale(high - low, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z)));
         // Parcels account for bulk earth under a continuous fill mesh, rather than a grid of rigid cubes.
         float unit=Mathf.Pow(Mathf.Max(0.001f,size),3);
-        return Mathf.Min(capacity,Mathf.Max(0,Mathf.FloorToInt(world.x*world.y*world.z*0.8f/unit)));
+        float available=world.x*world.y*world.z*0.8f;
+        if(ratedCapacityCubicMetres>0)available=Mathf.Min(available,ratedCapacityCubicMetres*(1+heapedFraction));
+        return Mathf.Min(capacity,Mathf.Max(0,Mathf.FloorToInt(available/unit)));
     }
     public int FreeSlots(float size)
     {
@@ -165,27 +193,16 @@ public class BucketInside : MonoBehaviour
         float bottom = low.z;
         low += radius; high -= radius;
         if (high.x < low.x || high.y < low.y || high.z < low.z) return false;
-        var occupied = new Vector3[captured.Count];
-        for (int i = 0; i < captured.Count; i++) occupied[i] = captured[i].transform.position;
-        float spacingSquared = size * size * 0.6f * 0.6f;
-        // Random packing, growing upwards from the floor. Expand the search if a lower layer is packed.
+        // Parcels are hidden, collider-free volume records. The continuous mesh defines their visible surface.
         float filled = (captured.Count + 1f) / Mathf.Max(1, SlotCapacity(size));
         float top = Mathf.Clamp(bottom + (high.z + radius.z - bottom) * filled - radius.z, low.z, high.z);
-        for (int pass = 0; pass < 2; pass++)
-        for (int attempt = 0; attempt < 256; attempt++)
-        {
-            var local = new Vector3(Random.Range(low.x, high.x), Random.Range(low.y, high.y), Random.Range(low.z, pass == 0 ? top : high.z));
-            var candidate = transform.TransformPoint(local);
-            bool free = true;
-            foreach (var other in occupied) if ((candidate - other).sqrMagnitude < spacingSquared) { free = false; break; }
-            if (free) { position = candidate; return true; }
-        }
-        return false;
+        position=transform.TransformPoint(new Vector3(Random.Range(low.x,high.x),Random.Range(low.y,high.y),Random.Range(low.z,top)));
+        return true;
     }
     public void Capture(DirtBlock block)
     {
         if (!block || captured.Contains(block)) return;
-        if(captured.Count>=SlotCapacity(chunkSize))
+        if(captured.Count>=SlotCapacity(chunkSize) || HeldVolume+block.Volume>MaximumVolume+0.0000001f)
         {block.DropAsSoil(PourPosition(Random.Range(-0.4f,0.4f)),Vector3.down*0.1f);return;}
         captured.Add(block);
         block.Hold(this);
@@ -194,6 +211,7 @@ public class BucketInside : MonoBehaviour
     public void Forget(DirtBlock block) { if (captured.Remove(block)) RefreshFill(); }
     void RefreshFill(bool gradual = false)
     {
+        RefreshCargo();
         if (!fill)
         {
             fill = gameObject.AddComponent<BucketSoilFill>();
@@ -201,6 +219,17 @@ public class BucketInside : MonoBehaviour
         }
         if (gradual) fill.SetTargetAmount(FillFraction);
         else fill.SetAmount(FillFraction);
+    }
+    void RefreshCargo()
+    {
+        currentVolumeCubicMetres=heldMass=loadAdhesion=0;
+        foreach(var block in captured)
+        {
+            if(!block || !block.gameObject.activeSelf)continue;
+            var soil=DigSystem.I?DigSystem.I.PropertiesFor(block.Kind):SoilProperties.For(block.Kind);
+            currentVolumeCubicMetres+=block.Volume;heldMass+=block.Volume*soil.density;loadAdhesion+=block.Volume*soil.adhesion;
+        }
+        if(currentVolumeCubicMetres>0)loadAdhesion/=currentVolumeCubicMetres;
     }
     public Vector3 PourPosition(float across)
     {
@@ -240,6 +269,7 @@ public class BucketInside : MonoBehaviour
         lastPosition = transform.position;
         lastRotation = transform.rotation;
         captured.RemoveAll(b => !b || !b.gameObject.activeSelf);
+        RefreshCargo();
         if (fill) {fill.SetDistribution(LoadOffset,LoadSlope);fill.Step(dt);}
         if (!IsDumping || captured.Count == 0)
         {
@@ -250,13 +280,13 @@ public class BucketInside : MonoBehaviour
         if (!sand) { sand = gameObject.AddComponent<SandFlow>(); sand.Initialize(this); }
         float strength = PourStrength;
         // Soil accelerates into a bounded, irregular stream; sudden tipping cannot empty the load in one frame.
-        float desired = maxPourRate * strength * Mathf.Lerp(0.75f, 1f, FillFraction) * Mathf.Lerp(1,0.5f,LoadAdhesion);
+        float desired = Mathf.Min(maxPourRate,dischargeCubicMetresPerSecond/Mathf.Max(0.000001f,HeldVolume/captured.Count)) * strength * Mathf.Lerp(0.75f, 1f, FillFraction) * Mathf.Lerp(1,0.5f,LoadAdhesion);
         flowRate = Mathf.MoveTowards(flowRate, desired, flowAcceleration * dt);
-        releaseCredit += flowRate * dt;
+        releaseCredit = Mathf.Min(releaseCredit+flowRate*dt,maxBatchSize*2);
         flowClock += dt;
         if (flowClock < batchInterval || releaseCredit < Mathf.Min(2, captured.Count)) return;
         flowClock = 0;
-        int count = Mathf.Min(captured.Count, maxBatchSize, Mathf.FloorToInt(releaseCredit));
+        int count = Mathf.Min(Mathf.Min(captured.Count,maxBatchSize),Mathf.Min(Mathf.FloorToInt(releaseCredit),DigSystem.I?DigSystem.I.AvailableLooseBodies:maxBatchSize));
         for (int n = 0; n < count; n++)
         {
             int next = 0; float best = float.NegativeInfinity;
@@ -273,6 +303,7 @@ public class BucketInside : MonoBehaviour
             Vector3 launch = inherited + sliding + transform.right * Random.Range(-0.04f, 0.04f);
             Vector3 release = PourPosition(Random.Range(-0.45f,0.45f));
             block.DropAsSoil(release, launch);
+            if(DigSystem.I && DigSystem.I.feedback)DigSystem.I.feedback.Report(release,block.Volume);
             sand.EmitLoose(release, launch, block.Volume * finesFraction * Mathf.Lerp(1,0.2f,LoadAdhesion));
         }
         releaseCredit -= count;

@@ -35,7 +35,7 @@ public class DirtBlock : MonoBehaviour
             soilCollider = gameObject.AddComponent<SphereCollider>();
             soilCollider.radius = 0.48f;
         }
-        colliders = GetComponentsInChildren<Collider>();
+        if(colliders==null)colliders = GetComponentsInChildren<Collider>();
         foreach (var renderer in renderers) renderer.enabled = true;
         SoilClodVisual.Apply(gameObject);
         if (grainCollider) grainCollider.size = originalColliderSize;
@@ -48,7 +48,8 @@ public class DirtBlock : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.linearDamping = 0.15f;
         rb.angularDamping = 0.8f;
-        rb.mass = Mathf.Max(0.01f, volume * SoilProperties.For(Kind).density);
+        rb.mass = Mathf.Max(0.01f, volume * owner.PropertiesFor(Kind).density);
+        rb.solverIterations=8;rb.solverVelocityIterations=2;rb.maxDepenetrationVelocity=2;
         SetColliders(true);
         IsHeld = false;
         calm = age = 0;
@@ -116,12 +117,14 @@ public class DirtBlock : MonoBehaviour
         if (!owner || IsHeld || !gameObject.activeSelf || !owner.ContainsTerrainPoint(point) ||
             (owner.bucket && owner.bucket.Contains(this))) return;
         float radius = Mathf.Max(depositRadius, Mathf.Pow(Volume, 1f / 3f) * 1.5f);
-        Volume -= owner.Add(point, radius, Volume, true);
+        float deposited=owner.Add(point, radius, Volume, true,Kind);
+        Volume -= deposited;
+        if(owner.feedback)owner.feedback.Report(point,deposited);
         if (Volume <= owner.BlockVolume * 0.001f) owner.Release(this);
     }
     public bool TryBreak(Vector3 normal, float impactSpeed)
     {
-        if (!owner || !owner.CanSpawn || Volume <= 0 || IsHeld || FractureLevel > 0 || impactSpeed < breakSpeed || owner.FreeBlocks < 2) return false;
+        if (!owner || !owner.CanSpawn || owner.AvailableLooseBodies<2 || Volume <= 0 || IsHeld || FractureLevel > 0 || impactSpeed < breakSpeed || owner.FreeBlocks < 2) return false;
         if (normal.sqrMagnitude < 0.001f) normal = Vector3.up;
         normal.Normalize();
         float childVolume = Volume / 3f;
@@ -142,7 +145,7 @@ public class DirtBlock : MonoBehaviour
         FractureLevel = 1;
         var parentScale = transform.parent ? transform.parent.lossyScale : Vector3.one;
         transform.localScale = new Vector3(size / Mathf.Abs(parentScale.x), size / Mathf.Abs(parentScale.y), size / Mathf.Abs(parentScale.z));
-        rb.mass = Mathf.Max(0.01f, childVolume * SoilProperties.For(Kind).density);
+        rb.mass = Mathf.Max(0.01f, childVolume * owner.PropertiesFor(Kind).density);
         rb.position = center + tangent * size * 0.7f;
         rb.linearVelocity = inherited + tangent * 0.12f + normal * 0.08f;
         if (owner.bucket && owner.bucket.Sand) owner.bucket.Sand.EmitImpact(center, normal, 18);

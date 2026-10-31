@@ -14,6 +14,7 @@ public class Claw : MonoBehaviour
         [HideInInspector] public float amount;       // 0 = atviras, 1 = uždarytas
         [HideInInspector] public Rigidbody touching; // kas sustabdė šį nagą
         [HideInInspector] public bool blocked;
+        [System.NonSerialized] public GroundedAttachment terrainContact;
     }
 
     public LeverBase lever;
@@ -55,6 +56,7 @@ public class Claw : MonoBehaviour
             j.rest = j.part.localRotation;
             if (j.contacts == null || j.contacts.Length == 0)
                 j.contacts = j.part.GetComponentsInChildren<Collider>();
+            j.terrainContact=j.part.GetComponent<GroundedAttachment>();
         }
         previous = new float[jaws.Length];
         if (grip) lastGrip = grip.position;
@@ -103,10 +105,16 @@ public class Claw : MonoBehaviour
             var j = jaws[i];
             if (!j.part) continue;
             previous[i] = j.amount;
+            var terrain=DigSystem.I?DigSystem.I.terrain:Terrain.activeTerrain;
+            float before=j.terrainContact?j.terrainContact.Depth(terrain):0;
             j.amount = Mathf.Clamp01(j.amount + d);
             j.blocked = false;
             j.touching = null;
             ApplyPose(j);
+            float after=j.terrainContact?j.terrainContact.Depth(terrain):0;
+            // Both opening and closing must respect fresh heightmap heights; allow escape from an existing overlap.
+            if(after>penetrationTolerance && after>before+0.0001f)
+            {j.amount=previous[i];ApplyPose(j);j.blocked=true;}
         }
         if (d <= 0f) return;
 

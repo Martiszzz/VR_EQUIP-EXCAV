@@ -1,5 +1,7 @@
 # Ekskavatoriaus ir grunto fizika
 
+Naujausia kontaktų, talpos, grunto medžiagų, efektų ir hidraulinės atramos informacija bei Play patikros pateiktos [SoilInteraction.md](SoilInteraction.md).
+
 Abiejuose lygiuose įjungtas bendras siurblys (`ExcavatorHydraulics`), judančių dalių svoris (`ExcavatorMass`), reljefo atramos ir vietinė grunto dinamika (`DigSystem`). Tai valdomas heightmap modelis; iškasos neturi urvų ar požeminių ertmių.
 
 - **Dantys:** `DigTeeth.toothCount` paskirsto atskirus pjūvius per tikrą kaušo plotį. Dantų pradžios ir pabaigos pozicijos fiksuojamos prieš kiekvieną leidžiamą judesį. Kaušo dugnas bei pasyvus kritimas nekasa.

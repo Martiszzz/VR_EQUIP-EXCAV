@@ -26,7 +26,7 @@ public class ExcavatorBody : MonoBehaviour
 
     public class Probe
     {
-        static readonly Collider[] hits = new Collider[64];
+        static readonly Collider[] hits = new Collider[128];
         readonly ExcavatorBody body;
         readonly Transform part;
         readonly List<Collider> mine = new List<Collider>();
@@ -41,11 +41,25 @@ public class ExcavatorBody : MonoBehaviour
         readonly List<Vector3> previousBodies = new List<Vector3>();
         float nextRefresh = -1f;
         bool workingSoil;
+        Vector3 groundContact;
 
         public float CuttingResistance {get;private set;}=1;
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
+        void RefreshColliders()
+        {
+            if(Time.time<nextRefresh)return;
+            part.GetComponentsInChildren<Collider>(false,mine);nextRefresh=Time.time+.25f;
+        }
+        public int MotionSteps(float degrees)
+        {
+            RefreshColliders();float reach=0;
+            foreach(var collider in mine)
+                if(collider && collider.enabled && !collider.isTrigger)
+                    reach=Mathf.Max(reach,Vector3.Distance(part.position,collider.bounds.center)+collider.bounds.extents.magnitude);
+            return Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(Mathf.Abs(degrees)/.25f,Mathf.Abs(degrees)*Mathf.Deg2Rad*reach/.008f)),1,128);
+        }
         public void BeginMove()
         {
             workingSoil=false;
@@ -69,7 +83,7 @@ public class ExcavatorBody : MonoBehaviour
         public float WorkSoil(float dt)
         {
             workingSoil=true;
-            float moved=0;CuttingResistance=1;
+            float moved=0;Vector3 workPoint=part.position;CuttingResistance=1;
             for (int i = 0; i < teeth.Count; i++)
                 if (teeth[i].tip)
                 {
@@ -77,30 +91,40 @@ public class ExcavatorBody : MonoBehaviour
                     bool closing=bucket && part==teeth[i].transform && Vector3.Dot(bucket.transform.TransformDirection(bucket.openingAxis.normalized),Vector3.up)>previousMouthUp[i]+0.000001f && Quaternion.Angle(previousRotations[i],teeth[i].transform.rotation)>0.01f;
                     teeth[i].Sweep(previousTips[i],teeth[i].tip.position,dt,teeth[i].transform.position-previousBodies[i],closing);
                     moved+=teeth[i].LastWorkVolume;
+                    if(teeth[i].LastWorkVolume>0)workPoint=teeth[i].tip.position;
                     CuttingResistance=Mathf.Max(CuttingResistance,teeth[i].LastResistance);
                 }
             if(DigSystem.I && Ignition.EngineRunning)
-                for(int i=0;i<pushing.Count;i++) moved+=DigSystem.I.PushAttachmentSoil(pushing[i],pushing[i].transform.TransformPoint(pushing[i].WorkBounds.center)-previousBlades[i]);
+                for(int i=0;i<pushing.Count;i++)
+                {
+                    var point=pushing[i].transform.TransformPoint(pushing[i].WorkBounds.center);
+                    float volume=DigSystem.I.PushAttachmentSoil(pushing[i],point-previousBlades[i]);moved+=volume;
+                    if(volume>0)
+                    {
+                        workPoint=new Vector3(point.x,DigSystem.I.SurfaceY(point),point.z);
+                        CuttingResistance=Mathf.Max(CuttingResistance,DigSystem.I.SoilAt(workPoint).resistance*(1+DigSystem.I.LastBladeLoad));
+                    }
+                }
             var grounding=body.GetComponent<ExcavatorGrounding>();
             if(grounding)
             {
                 float resistance=1;foreach(var tooth in teeth)resistance=Mathf.Max(resistance,tooth.LastResistance);
                 grounding.ReportHydraulicWork(moved*resistance,dt);
             }
+            if(moved>0 && DigSystem.I && DigSystem.I.feedback)
+                DigSystem.I.feedback.Report(workPoint,moved);
             return moved;
         }
-        public bool ReactToGround(float dt)
+        public bool ReactToGround(float dt,float effort=1)
         {
             var grounding=body.GetComponent<ExcavatorGrounding>();
             if(!grounding || !grounding.Ready)return false;
             float depth=GroundDepth();
             if(depth<=Tolerance)return false;
+            Vector3 contact=groundContact;
             Vector3 position=grounding.chassis.position;Quaternion rotation=grounding.chassis.rotation;
             var full=body.chassisProbe ?? (body.chassisProbe=body.CreateProbe(grounding.chassis));float before=full.Depth(true);
-            Vector3 contact=part.position;
-            if(teeth.Count>0 && teeth[0].tip)contact=teeth[0].tip.position;
-            else if(pushing.Count>0)contact=pushing[0].transform.TransformPoint(pushing[0].WorkBounds.center);
-            bool reacted=grounding.TryHydraulicReaction(contact,depth,dt);
+            bool reacted=grounding.TryHydraulicReaction(contact,depth,dt,effort);
             Physics.SyncTransforms();
             if(reacted && GroundDepth()<=Tolerance && full.Depth(true)<=Mathf.Max(Tolerance,before) && full.GroundDepth()<=Tolerance) {CancelMove();return true;}
             grounding.chassis.SetPositionAndRotation(position,rotation);grounding.RefreshState();Physics.SyncTransforms();return false;
@@ -112,10 +136,13 @@ public class ExcavatorBody : MonoBehaviour
             // Bucket contents change during digging, so check capacity on every proposed move.
             part.GetComponentsInChildren<BucketInside>(false, buckets);
             float depth = 0;
-            foreach (var bucket in buckets) depth = Mathf.Max(depth, bucket.GroundPenetration(DigSystem.I,workingSoil));
+            groundContact=part.position;
+            foreach(var bucket in buckets)
+            {float d=bucket.GroundPenetration(DigSystem.I,workingSoil,out var contact);if(d>depth){depth=d;groundContact=contact;}}
             part.GetComponentsInChildren<GroundedAttachment>(false, grounded);
             var terrain = DigSystem.I ? DigSystem.I.terrain : Terrain.activeTerrain;
-            foreach (var attachment in grounded) depth = Mathf.Max(depth, attachment.Depth(terrain));
+            foreach(var attachment in grounded)
+            {float d=attachment.Depth(terrain,out var contact);if(d>depth){depth=d;groundContact=contact;}}
             return depth;
         }
 
@@ -123,11 +150,7 @@ public class ExcavatorBody : MonoBehaviour
         // ignoreFloor: ignoruoja kontaktus iš apačios (vikšrai stovi ant grindų).
         public float Depth(bool ignoreFloor)
         {
-            if (Time.time >= nextRefresh)
-            {
-                part.GetComponentsInChildren<Collider>(false, mine);
-                nextRefresh = Time.time + 0.25f;
-            }
+            RefreshColliders();
             float total = 0f;
             for (int k = 0; k < mine.Count; k++)
             {
@@ -136,6 +159,7 @@ public class ExcavatorBody : MonoBehaviour
                 var bounds = a.bounds;
                 int n = Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents, hits,
                     Quaternion.identity, body.obstacles, QueryTriggerInteraction.Ignore);
+                if(n==hits.Length)return Mathf.Max(total,Tolerance+.001f); // Fail closed if the overlap query is saturated.
                 for (int i = 0; i < n; i++)
                 {
                     var b = hits[i];

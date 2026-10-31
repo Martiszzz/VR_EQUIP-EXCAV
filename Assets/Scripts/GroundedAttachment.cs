@@ -3,12 +3,15 @@ using UnityEngine;
 // Rigid tools (the dozer blade) cannot excavate by passing through the heightmap.
 public class GroundedAttachment : MonoBehaviour
 {
+    public bool includeChildren = true;
+    public bool canPushSoil = true;
     Collider[] contacts;
+    Collider[] Contacts => contacts ?? (contacts = includeChildren ? GetComponentsInChildren<Collider>() : GetComponents<Collider>());
     public Bounds WorkBounds
     {
         get
         {
-            if(contacts==null)contacts=GetComponentsInChildren<Collider>();
+            var contacts=Contacts;
             var bounds=new Bounds(Vector3.zero,Vector3.zero);bool first=true;
             foreach(var c in contacts)
             {
@@ -23,33 +26,46 @@ public class GroundedAttachment : MonoBehaviour
             return bounds;
         }
     }
-    public float Depth(Terrain terrain)
+    public float Depth(Terrain terrain) => Depth(terrain,out _);
+    public float Depth(Terrain terrain,out Vector3 contact)
     {
+        contact=transform.position;
         if (!terrain) return 0;
-        if (contacts == null) contacts = GetComponentsInChildren<Collider>();
-        float depth = 0;
+        var contacts=Contacts;
+        float depth = 0;int contactCount=0;
         foreach (var c in contacts)
         {
             if (!c || !c.enabled || c.isTrigger) continue;
             Bounds local;
             if (c is BoxCollider box) local = new Bounds(box.center, box.size);
             else if (c is MeshCollider mesh && mesh.sharedMesh) local = mesh.sharedMesh.bounds;
-            else { depth = Mathf.Max(depth, Sample(terrain, c.bounds.min), Sample(terrain, new Vector3(c.bounds.center.x, c.bounds.min.y, c.bounds.center.z))); continue; }
+            else
+            {
+                Consider(terrain,c.bounds.min,ref depth,ref contact,ref contactCount);
+                Consider(terrain,new Vector3(c.bounds.center.x,c.bounds.min.y,c.bounds.center.z),ref depth,ref contact,ref contactCount);continue;
+            }
             for (int x = -2; x <= 2; x++)
             for (int y = -2; y <= 2; y++)
             for (int z = -2; z <= 2; z++)
             {
                 if (Mathf.Abs(x) < 2 && Mathf.Abs(y) < 2 && Mathf.Abs(z) < 2) continue;
-                depth = Mathf.Max(depth, Sample(terrain, c.transform.TransformPoint(local.center + Vector3.Scale(local.extents * 0.5f, new Vector3(x, y, z)))));
+                Consider(terrain,c.transform.TransformPoint(local.center+Vector3.Scale(local.extents*.5f,new Vector3(x,y,z))),ref depth,ref contact,ref contactCount);
             }
         }
         return depth;
+    }
+    static void Consider(Terrain terrain,Vector3 point,ref float depth,ref Vector3 contact,ref int count)
+    {
+        float candidate=Sample(terrain,point);
+        if(candidate>depth+.0001f){depth=candidate;contact=point;count=1;}
+        else if(candidate>0 && Mathf.Abs(candidate-depth)<=.0001f)
+        {depth=Mathf.Max(depth,candidate);contact+=(point-contact)/++count;}
     }
     static float Sample(Terrain terrain, Vector3 p)
     {
         var local = p - terrain.transform.position;
         var size = terrain.terrainData.size;
         return local.x < 0 || local.z < 0 || local.x > size.x || local.z > size.z ? 0 :
-            Mathf.Max(0, terrain.SampleHeight(p) + terrain.transform.position.y - p.y);
+            Mathf.Max(0, (DigSystem.I && DigSystem.I.terrain==terrain?DigSystem.I.SurfaceY(p):terrain.SampleHeight(p)+terrain.transform.position.y) - p.y);
     }
 }

@@ -10,6 +10,7 @@ public class BucketSoilFill : MonoBehaviour
     Material material;
     Texture2D texture;
     Vector3[] vertices;
+    float[] rawGrid, caps;
     Transform[] details;
     Vector2[] detailPoints;
     float[] detailSizes;
@@ -54,6 +55,7 @@ public class BucketSoilFill : MonoBehaviour
         surface.sharedMaterial = material;
         int layer = (Columns + 1) * (Rows + 1);
         vertices = new Vector3[layer * 2];
+        rawGrid=new float[layer];caps=new float[layer];
         var uv = new Vector2[vertices.Length];
         for (int y = 0; y <= Rows; y++)
         for (int x = 0; x <= Columns; x++)
@@ -125,12 +127,14 @@ public class BucketSoilFill : MonoBehaviour
         surface.enabled = Amount > 0.001f;
         // Normalize the closed fill mesh to the actual stored bulk volume, including tilted/shifted surfaces.
         float desired=Amount*(container?container.MaximumBulkFraction:0.6f);
+        for(int row=0;row<=Rows;row++)for(int col=0;col<=Columns;col++)
+        {int i=row*(Columns+1)+col;float u=col/(float)Columns,v=row/(float)Rows;rawGrid[i]=RawHeight(u,v);caps[i]=HeightCap(u,v);}
         float left=0,right=8;
         for(int pass=0;pass<12;pass++)
         {
             float scale=(left+right)*0.5f,sum=0,weight=0;
             for(int row=0;row<=Rows;row++)for(int col=0;col<=Columns;col++)
-            {float w=(row==0 || row==Rows?0.5f:1)*(col==0 || col==Columns?0.5f:1);sum+=Mathf.Clamp01(RawHeight(col/(float)Columns,row/(float)Rows)*scale)*w;weight+=w;}
+            {int i=row*(Columns+1)+col;float w=(row==0 || row==Rows?0.5f:1)*(col==0 || col==Columns?0.5f:1);sum+=Mathf.Clamp(rawGrid[i]*scale,0,caps[i])*w;weight+=w;}
             if(sum/weight<desired)left=scale;else right=scale;
         }
         heightScale=(left+right)*0.5f;
@@ -167,8 +171,16 @@ public class BucketSoilFill : MonoBehaviour
     }
     Vector3 SurfacePoint(float u,float v)
     {
-        float height=Amount>0?Mathf.Clamp01(RawHeight(u,v)*heightScale):0;
-        return new Vector3(Mathf.Lerp(low.x,high.x,u),Mathf.Lerp(low.y,high.y,v),Mathf.Lerp(low.z,high.z,height));
+        float height=Amount>0?BoundHeight(u,v,RawHeight(u,v)*heightScale):0;
+        return new Vector3(Mathf.Lerp(low.x,high.x,u),Mathf.Lerp(low.y,high.y,v),Mathf.LerpUnclamped(low.z,high.z,height));
+    }
+    float BoundHeight(float u,float v,float height)
+        => Mathf.Clamp(height,0,HeightCap(u,v));
+    float HeightCap(float u,float v)
+    {
+        float mound=Mathf.Sin(Mathf.PI*u)*Mathf.Sin(Mathf.PI*v);
+        float heap=(container?container.heapedFraction:0.15f)*mound*Amount*Amount;
+        return 1+heap;
     }
     void OnDestroy()
     {
