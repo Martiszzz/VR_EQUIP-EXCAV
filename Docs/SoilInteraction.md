@@ -56,3 +56,14 @@ Po skriptų atnaujinimo sustabdyti Play ir iš naujo paleisti sceną: nauja kont
 Fizikos regresijų rezultatai atskiroje Unity kopijoje: abi tikros scenos nusėda virš reljefo (mažiausias vikšrų tarpas apie 3–5 mm), kaušas nekeičia savo vietos ant strėlės judant dinaminei važiuoklei. Level 2 grunto kontakto bandyme aktyvus gramdymas su reljefo sinchronizavimu vidutiniškai truko apie 3,4 ms vienam žingsniui ir po apšilimo nekūrė nuolatinių GC paskirstymų. Tai kompiuterio Editor batch matavimas; VR įrenginio FPS jis negarantuoja.
 
 Galutinė kasimo regresija pasiekė 2,032 m gylį per tikrus ribotų Level 1 sąnarių pjovimo ciklus; iškrauta apie 0,535 m³ surinkto grunto. Iškrovimas šiame izoliuotame bandyme atliekamas testiniu krovinių iškėlimo / nusėdimo pagalbininku, o tikras palaipsnis kaušo išpylimas atskirai tikrinamas bendroje regresijų grupėje. Šlaitų slinkimas gylio bandyme išjungtas. `RealisticControlValidation.Run`, `FollowupPhysicsValidation.Run`, `FollowupPhysicsValidation.RunScenes` ir `FollowupPhysicsValidation.RunDeep` galutinėse patikrose praėjo.
+
+## Vietinis supylimas ir atramos stabilizavimas
+
+Šis papildomas pakeitimas peržiūrėtas pagal logiką; naudotojo prašymu Unity ir automatiniai bandymai nepaleisti. Ankstesni bandymų rezultatai aukščiau priklauso ankstesnei versijai.
+
+- Kaušo šonai ir griebtuvas žemes perkelia greta kontakto, ne per kelis darbo spindulius. `DigSystem.looseSoilEdgeGap` numatyta 0,025 m. Peilio pylimas taip pat priartintas prie jo krašto.
+- Pagal vikšrų geometriją ir 0,15 m paraštę saugomas važiuoklės plotas: ten neleidžiamas supylimas, įrankių kasimas ar šlaitų grunto perkėlimas. Vikšrų negilios vėžės apdorojamos atskirai. Blokuotas perkėlimas nekeičia pradinio grunto, todėl nesukuria pakaitinio kupsto po mašina.
+- Atramos jėga glodinama per `supportForceSmoothing=0.15` s; kėlimo momentui leidžiamas `liftForceSurplus=0.06` priedas. Slopinimas remiasi kontaktinio taško efektyvia mase; galutinė jėga apribojama ir po slopinimo.
+- Kritimo greitis prie atramos ribojamas pagal numatomą vikšro kontaktą. Jei vikšras vis dėlto persidengė su reljefu, leidžiama tik maža atkuriamoji korekcija, o ne laukimas, kol suspaustos spyruoklės išmes užkastą mašiną. `terrainContactSkin=0.005` m.
+
+Sustabdyti Play ir paleisti sceną iš naujo, tada rankiniu būdu pabandyti peilio kėlimą, jo laikymą nuleistoje padėtyje ir žemių stūmimą arti vikšrų.

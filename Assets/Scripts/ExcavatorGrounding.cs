@@ -36,6 +36,15 @@ public partial class ExcavatorGrounding : MonoBehaviour
     public Vector3 Pivot => chassis ? chassis.TransformPoint(localCenter) : transform.position;
     public float DriveFactor => IsGrounded ? Mathf.Lerp(1, 0.45f, Mathf.Clamp01(Slope / maxDriveSlope)) * (massModel ? Mathf.Lerp(0.4f,1,massModel.Stability) : 1) : 0;
     Vector3 forward = Vector3.forward, localCenter;
+    Vector3 footprintMin,footprintMax;
+    public bool CoversSoilPoint(Vector3 point,float margin=.15f)
+    {
+        if(!Ready || !chassis)return false;
+        point.y=Pivot.y;
+        var local=chassis.InverseTransformPoint(point);var scale=chassis.lossyScale;
+        float mx=margin/Mathf.Max(.001f,Mathf.Abs(scale.x)),mz=margin/Mathf.Max(.001f,Mathf.Abs(scale.z));
+        return local.x>=footprintMin.x-mx && local.x<=footprintMax.x+mx && local.z>=footprintMin.z-mz && local.z<=footprintMax.z+mz;
+    }
     readonly Vector3[] contacts = new Vector3[13];
     readonly Vector3[] feet = new Vector3[13];
     readonly Vector3[] surface = new Vector3[13];
@@ -51,6 +60,8 @@ public partial class ExcavatorGrounding : MonoBehaviour
         if (!chassis || !leftTrack || !rightTrack) return false;
         forward = forwardAxis.sqrMagnitude > 0.01f ? forwardAxis.normalized : Vector3.forward;
         if (!TrackPoints(leftTrack, 0) || !TrackPoints(rightTrack, 6)) return false;
+        footprintMin=footprintMax=contacts[0];
+        for(int i=1;i<12;i++){footprintMin=Vector3.Min(footprintMin,contacts[i]);footprintMax=Vector3.Max(footprintMax,contacts[i]);}
         localCenter = Vector3.zero;
         for(int i=0;i<12;i++)localCenter+=contacts[i]/12f;
         if(!massModel)massModel=GetComponent<ExcavatorMass>();

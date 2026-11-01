@@ -11,6 +11,15 @@ public partial class DigSystem : MonoBehaviour
     public SoilWorkFeedback feedback;
     public ExcavatorGrounding workMachine;
     [Min(2)] public float maximumWorkDistance=8;
+    [Range(.01f,.15f)] public float looseSoilEdgeGap=.025f;
+    bool CanDepositAt(Vector3 point) => !workMachine || !workMachine.CoversSoilPoint(point);
+    float DepositWeight(int x0,int z0,int x,int z,float cx,float cz,float rx,float rz)
+    {
+        if(!workMachine)return Weight(x0,z0,x,z,cx,cz,rx,rz);
+        var origin=terrain.transform.position;var cell=terrain.terrainData.heightmapScale;
+        var point=origin+new Vector3((x0+x)*cell.x,0,(z0+z)*cell.z);
+        return CanDepositAt(point)?Weight(x0,z0,x,z,cx,cz,rx,rz):0;
+    }
     public bool IsWorkPoint(Vector3 point)
     {
         if(!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z))return false;
@@ -61,15 +70,12 @@ public partial class DigSystem : MonoBehaviour
     {
         var horizontal = Vector3.ProjectOnPlane(motion, Vector3.up);
         if (horizontal.magnitude < 0.0001f || horizontal.magnitude < Mathf.Abs(motion.y) || !ContainsTerrainPoint(point)) return 0;
-        var destination = point + horizontal.normalized * radius * 1.8f;
+        var destination = point + horizontal.normalized * (radius + looseSoilEdgeGap);
         if (!ContainsTerrainPoint(destination)) return 0;
         float penetration = SurfaceY(point) - point.y;
         if (penetration <= 0) return 0;
         float budget = horizontal.magnitude * radius * 2f * Mathf.Min(penetration, maxDepth);
-        float removed = Dig(point, radius, Mathf.Min(penetration, maxDepth), budget, point.y);
-        float deposited = Add(destination, radius, removed, true);
-        if (deposited < removed) Add(point, radius, removed - deposited, true);
-        return deposited;
+        return MoveSoilLocally(point,radius,Mathf.Min(penetration,maxDepth),budget,point.y,destination);
     }
     public int FreeBlocks => Mathf.Max(0, maxBlocks - active.Count);
     public float PushBucketSoil(BucketInside container, Vector3 motion, float maxDepth)
@@ -100,7 +106,7 @@ public partial class DigSystem : MonoBehaviour
         float forwardExtent = Mathf.Abs(direction.x) * bounds.extents.x + Mathf.Abs(direction.z) * bounds.extents.z;
         float width = Mathf.Abs(direction.z) * bounds.size.x + Mathf.Abs(direction.x) * bounds.size.z;
         float radius = Mathf.Max(width * (grading ? 0.45f : 0.65f), Mathf.Max(cell.x, cell.z) * 2);
-        var destination = bounds.center + direction * (forwardExtent + radius * (grading ? 1 : 2) + Mathf.Max(cell.x, cell.z) * 2);
+        var destination = bounds.center + direction * (forwardExtent + radius + looseSoilEdgeGap);
         if (!ContainsTerrainPoint(destination)) return 0;
         int res = td.heightmapResolution;
         int x0 = Mathf.Clamp(Mathf.FloorToInt((bounds.min.x - origin.x) / cell.x) - 1, 0, res - 1);
@@ -118,6 +124,7 @@ public partial class DigSystem : MonoBehaviour
         for (int x = 0; x < heights.GetLength(1); x++)
         {
             float wx = origin.x + (x0 + x) * cell.x, wz = origin.z + (z0 + z) * cell.z;
+            if(!CanDepositAt(new Vector3(wx,0,wz)))continue;
             float bottom = float.PositiveInfinity;
             // Clear one interpolation cell around the tool so the heightmap cannot form an invisible rim.
             for (int dz = -1; dz <= 1; dz++)
@@ -145,18 +152,18 @@ public partial class DigSystem : MonoBehaviour
             float pile=Mathf.Max(0,SurfaceY(bounds.center)-bounds.min.y);
             float sideFraction=Mathf.Clamp(0.2f+pile*2,0.2f,0.6f);
             float sideRadius=Mathf.Max(width*0.22f,Mathf.Max(cell.x,cell.z)*1.5f);
-            var edge=bounds.center+direction*(forwardExtent+sideRadius+Mathf.Max(cell.x,cell.z)*2);
-            deposited=Add(edge+side*(width*0.5f+sideRadius),sideRadius,displaced*sideFraction*0.5f,true);
-            deposited+=Add(edge-side*(width*0.5f+sideRadius),sideRadius,displaced*sideFraction*0.5f,true);
+            var edge=bounds.center+direction*(forwardExtent+sideRadius+looseSoilEdgeGap);
+            deposited=Add(edge+side*(width*0.5f+looseSoilEdgeGap),sideRadius,displaced*sideFraction*0.5f,true);
+            deposited+=Add(edge-side*(width*0.5f+looseSoilEdgeGap),sideRadius,displaced*sideFraction*0.5f,true);
             deposited+=FillLowSpots(destination,radius,bounds.min.y+0.003f,displaced-deposited);
-            deposited+=Add(destination+direction*radius*0.75f,radius,displaced-deposited,true);
+            deposited+=Add(destination,radius,displaced-deposited,true);
             float resistance=SoilAt(new Vector3(bounds.center.x,SurfaceY(bounds.center),bounds.center.z)).resistance;
             LastBladeLoad=Mathf.Clamp01(displaced*resistance/Mathf.Max(0.0001f,horizontal.magnitude*width*0.15f));
         }
         else
         {
             deposited=grading?FillLowSpots(destination,radius,bounds.min.y+0.003f,displaced):0;
-            deposited+=Add(destination+(grading?direction*radius*0.75f:Vector3.zero),radius,displaced-deposited,true);
+            deposited+=Add(destination,radius,displaced-deposited,true);
         }
         if (deposited <= 0) return 0;
         float ratio = Mathf.Clamp01(deposited / displaced);
@@ -170,7 +177,7 @@ public partial class DigSystem : MonoBehaviour
     }
     float FillLowSpots(Vector3 point, float radius, float gradeY, float volume)
     {
-        if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
+        if (volume <= 0 || !CanDepositAt(point) || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0;
         var td = terrain.terrainData;
         using var patch=EditHeights(x0,z0,w,h);
@@ -179,7 +186,7 @@ public partial class DigSystem : MonoBehaviour
         for (int z = 0; z < h; z++)
         for (int x = 0; x < w; x++)
         {
-            needed[z, x] = Mathf.Max(0, target - heights[z, x]) * Weight(x0, z0, x, z, cx, cz, rx, rz);
+            needed[z, x] = Mathf.Max(0, target - heights[z, x]) * DepositWeight(x0, z0, x, z, cx, cz, rx, rz);
             sum += needed[z, x];
         }
         if (sum <= 0) return 0;
@@ -349,9 +356,12 @@ public partial class DigSystem : MonoBehaviour
         var heights=patch.Heights;var cuts=patch.Scratch;
         float sum = 0;
         float floor = Mathf.Max(0, (floorY - terrain.transform.position.y) / td.size.y);
+        var cell=td.heightmapScale;var origin=terrain.transform.position;
         for (int z = 0; z < h; z++)
             for (int x = 0; x < w; x++)
             {
+                var vertex=origin+new Vector3((x0+x)*cell.x,0,(z0+z)*cell.z);
+                if(!CanDepositAt(vertex)){cuts[z,x]=0;continue;}
                 float cut = Mathf.Min(depth * Weight(x0, z0, x, z, cx, cz, rx, rz) / td.size.y,
                     Mathf.Max(0, heights[z, x] - floor));
                 cuts[z, x] = cut;
@@ -375,7 +385,7 @@ public partial class DigSystem : MonoBehaviour
     // Return the accepted volume so a saturated terrain never silently deletes soil.
     public float Add(Vector3 point, float radius, float volume, bool deferUpdates = false, SoilKind? material = null)
     {
-        if (!IsWorkPoint(point) || volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
+        if (!IsWorkPoint(point) || !CanDepositAt(point) || volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
         RememberSoilSurface();
@@ -388,14 +398,14 @@ public partial class DigSystem : MonoBehaviour
             float sumW = 0;
             for (int z = 0; z < h; z++)
                 for (int x = 0; x < w; x++)
-                    if (heights[z, x] < 1f) sumW += Weight(x0, z0, x, z, cx, cz, rx, rz);
+                    if (heights[z, x] < 1f) sumW += DepositWeight(x0, z0, x, z, cx, cz, rx, rz);
             if (sumW <= 0) break;
             float added = 0;
             bool clipped = false;
             for (int z = 0; z < h; z++)
                 for (int x = 0; x < w; x++)
                 {
-                    float desired = remaining * Weight(x0, z0, x, z, cx, cz, rx, rz) / sumW;
+                    float desired = remaining * DepositWeight(x0, z0, x, z, cx, cz, rx, rz) / sumW;
                     float before = heights[z, x];
                     heights[z, x] = Mathf.Min(1f, before + desired);
                     added += heights[z, x] - before;

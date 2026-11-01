@@ -132,7 +132,8 @@ public partial class DigSystem
         for(int region=SoilRegion.Active.Count-1;region>=0;region--)
             if(SoilRegion.Active[region] && SoilRegion.Active[region].Contains(point)){kind=SoilRegion.Active[region].kind;break;}
         var soil=PropertiesFor(kind);
-        if(!IsWorkPoint(point))return false;
+        var destination=origin+new Vector3((x0+dx)*scale.x,h[dz,dx]*scale.y,(z0+dz)*scale.z);
+        if(!IsWorkPoint(point) || !CanDepositAt(point) || !CanDepositAt(destination))return false;
         float naturalDifference=Mathf.Abs(pushBaseHeights[z0+az,x0+ax]-pushBaseHeights[z0+bz,x0+bx])*scale.y;
         float stableDifference=Mathf.Max(naturalDifference,Mathf.Tan(soil.repose*Mathf.Deg2Rad)*distance+soil.cohesion);
         float excess=Mathf.Abs(difference)-stableDifference;
@@ -150,10 +151,7 @@ public partial class DigSystem
         float depth=Mathf.Min(0.003f,(Mathf.Abs(travel)*0.018f+Mathf.Abs(slip)*dt*0.008f)*soil.softness*Mathf.Clamp(pressure,0.3f,2));
         if(depth<=0.00001f)return 0;
         var side=Vector3.Cross(Vector3.up,forward).normalized;float radius=Mathf.Max(width*0.45f,terrain.terrainData.heightmapScale.x*0.8f);
-        float removed=Dig(center,radius,depth,0.0005f,floor);
-        float added=Add(center+side*(radius*2.5f),radius,removed*0.5f,true);
-        added+=Add(center-side*(radius*2.5f),radius,removed-added,true);
-        if(added<removed)Add(center,radius,removed-added,true);
-        return added;
+        return MoveSoilLocally(center,radius,depth,.0005f,floor,
+            center+side*(radius*2.5f),center-side*(radius*2.5f),true);
     }
 }

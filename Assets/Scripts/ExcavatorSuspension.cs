@@ -9,6 +9,10 @@ public partial class ExcavatorGrounding
     [Min(.01f)] public float contactReach=.06f;
     [Min(.1f)] public float supportForceMargin=1.2f;
     [Min(.01f)] public float toolCompliance=.025f;
+    [Min(.04f)] public float supportForceSmoothing=.15f;
+    [Range(0,.2f)] public float liftForceSurplus=.06f;
+    [Min(.001f)] public float terrainContactSkin=.005f;
+    float smoothedToolForce,toolForceVelocity;
     public int GroundedTrackPoints {get;private set;}
     public Rigidbody PhysicalBody {get;private set;}
     public bool UsesPhysicalSupport => physicalSuspension && PhysicalBody && !PhysicalBody.isKinematic;
@@ -25,7 +29,7 @@ public partial class ExcavatorGrounding
         body.isKinematic=false;body.useGravity=true;
         body.constraints=RigidbodyConstraints.FreezePositionX|RigidbodyConstraints.FreezePositionZ|RigidbodyConstraints.FreezeRotationY;
         body.interpolation=RigidbodyInterpolation.Interpolate;body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
-        body.linearDamping=.2f;body.angularDamping=2;body.maxAngularVelocity=.4f;
+        body.linearDamping=.4f;body.angularDamping=5;body.maxAngularVelocity=.25f;
     }
     void RefreshPhysicalContact()
     {
@@ -90,12 +94,38 @@ public partial class ExcavatorGrounding
         if(deepest>0)ApplyToolForce(point,deepest,dt);
         else if(requestRemaining>0 && requestedEffort>0)
             ApplyToolForce(requestedPoint,.003f,dt);
+        else {smoothedToolForce=0;toolForceVelocity=0;}
         requestRemaining=Mathf.Max(0,requestRemaining-dt);
-        var velocity=body.linearVelocity;velocity.y=Mathf.Clamp(velocity.y,-maxFallSpeed,Mathf.Min(maxRiseSpeed,.8f));body.linearVelocity=velocity;
+        var velocity=body.linearVelocity;velocity.y=Mathf.Clamp(velocity.y,-maxFallSpeed,Mathf.Min(maxRiseSpeed,.35f));body.linearVelocity=velocity;
         float tilt=Vector3.Angle(chassis.up,SupportNormal);
         if(tilt>maxHydraulicTilt && Vector3.Dot(body.angularVelocity,Vector3.Cross(SupportNormal,chassis.up))>0)
-            body.angularVelocity=Vector3.zero;
+        {
+            var axis=Vector3.Cross(SupportNormal,chassis.up).normalized;
+            body.angularVelocity-=axis*Mathf.Max(0,Vector3.Dot(body.angularVelocity,axis));
+        }
+        ConstrainTrackContact(dt);
         RefreshPhysicalContact();
+    }
+    void ConstrainTrackContact(float dt)
+    {
+        var body=PhysicalBody;float minGap=float.PositiveInfinity,minVelocity=-maxFallSpeed;
+        for(int i=0;i<12;i++)
+        {
+            if(!found[i])continue;
+            float gap=feet[i].y-surface[i].y;minGap=Mathf.Min(minGap,gap);
+            if(gap>contactReach)continue;
+            float angularY=body.GetPointVelocity(feet[i]).y-body.linearVelocity.y;
+            minVelocity=Mathf.Max(minVelocity,(-terrainContactSkin-gap)/Mathf.Max(.001f,dt)-angularY+gravity*dt);
+        }
+        // A ray-supported chassis has no terrain collision impulse. Stop an incoming track at the
+        // surface instead of waiting for capped suspension springs to recover a buried machine.
+        var velocity=body.linearVelocity;velocity.y=Mathf.Max(velocity.y,Mathf.Min(.15f,minVelocity));body.linearVelocity=velocity;
+        if(minGap < -terrainContactSkin)
+        {
+            body.position+=Vector3.up*Mathf.Min(.015f,-terrainContactSkin-minGap);
+            body.angularVelocity*=Mathf.Exp(-20*dt);
+            Gather(chassis.position,chassis.rotation);
+        }
     }
     void RequestToolForce(Vector3 point,float depth,float effort)
     {
@@ -111,16 +141,22 @@ public partial class ExcavatorGrounding
             back=Mathf.Min(back,Vector3.Dot(feet[i],direction));
         if(float.IsPositiveInfinity(back))return;
         Vector3 rear=Vector3.zero;int count=0;
-        for(int i=0;i<12;i++)if(found[i] && Vector3.Dot(feet[i],direction)<=back+.05f){rear+=feet[i];count++;}
+        for(int i=0;i<12;i++)if(found[i] && Mathf.Abs(feet[i].y-surface[i].y-groundClearance)<contactReach && Vector3.Dot(feet[i],direction)<=back+.05f){rear+=feet[i];count++;}
         if(count==0)return;rear/=count;
         float arm=Vector3.Dot(point-rear,direction);if(arm<.25f)return;
         float weight=PhysicalBody.mass*gravity;
         RequiredLiftForce=weight*Mathf.Max(.05f,Vector3.Dot(PhysicalBody.worldCenterOfMass-rear,direction))/arm;
         float pressure=depth/Mathf.Max(.005f,toolCompliance);
         if(requestRemaining>0)pressure=Mathf.Max(pressure,requestedEffort);
-        float force=Mathf.Min(maximumHydraulicForce*Mathf.Clamp01(pressure),RequiredLiftForce*supportForceMargin);
-        force=Mathf.Max(0,force-PhysicalBody.GetPointVelocity(point).y*PhysicalBody.mass*2);
+        float cap=Mathf.Min(maximumHydraulicForce,RequiredLiftForce*Mathf.Min(supportForceMargin,1+liftForceSurplus));
+        var torque=Quaternion.Inverse(PhysicalBody.rotation)*Vector3.Cross(point-PhysicalBody.worldCenterOfMass,Vector3.up);
+        var inertia=PhysicalBody.inertiaTensor;
+        float effectiveMass=1/(1/PhysicalBody.mass+torque.x*torque.x/Mathf.Max(1,inertia.x)+torque.y*torque.y/Mathf.Max(1,inertia.y)+torque.z*torque.z/Mathf.Max(1,inertia.z));
+        float damping=2*Mathf.Sqrt(Mathf.Max(1,RequiredLiftForce/Mathf.Max(.005f,toolCompliance))*effectiveMass)*1.2f;
+        float target=Mathf.Clamp(Mathf.Min(maximumHydraulicForce*Mathf.Clamp01(pressure),cap)-PhysicalBody.GetPointVelocity(point).y*damping,0,cap);
+        float force=Mathf.Clamp(Mathf.SmoothDamp(smoothedToolForce,target,ref toolForceVelocity,supportForceSmoothing,float.PositiveInfinity,dt),0,cap);
         if(Vector3.Angle(chassis.up,SupportNormal)>=maxHydraulicTilt && force>RequiredLiftForce)force=RequiredLiftForce;
+        smoothedToolForce=force;
         AppliedLiftForce=force;HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(force/maximumHydraulicForce));
         // Actual Newtons at the planted tool, balanced by independent track spring forces and gravity.
         PhysicalBody.AddForceAtPosition(Vector3.up*force,point,ForceMode.Force);
