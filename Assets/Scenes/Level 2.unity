@@ -1396,7 +1396,7 @@ MonoBehaviour:
   turnMultiplier: 1
   turnSpeed: 25
   turnAcceleration: 40
-  throttle: {fileID: 0}
+  throttle: {fileID: 9205069731105245680}
   blockByWorld: 1
   grounding: {fileID: 2048484093}
 --- !u!1 &817075155
@@ -4127,6 +4127,20 @@ MonoBehaviour:
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  maximumHydraulicForce: 18000
+  liftThreshold: 1.1
+  settlingDamping: 0.25
+  physicalSuspension: 1
+  suspensionCompression: 0.018
+  suspensionDamping: 1
+  contactReach: 0.06
+  toolCompliance: 0.025
+  supportForceSmoothing: 0.15
+  terrainContactSkin: 0.005
+  plantedToolSpeed: 0.08
+  supportReleaseGap: 0.02
+  supportedRestDelay: 0.12
+
 --- !u!114 &2048484094
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8155,6 +8169,9 @@ MonoBehaviour:
   invertSide: 0
   forwardOnly: 1
   stemAxis: {x: 0, y: 0, z: 1}
+  hapticsEnabled: 1
+  hapticStrength: 0.75
+
 --- !u!114 &8477130755109987222
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8690,6 +8707,9 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::ExcavatorContacts
   addKinematicBody: 1
+  forceBasedChassis: 1
+  softGripperDepth: 0.06
+
 --- !u!114 &9070000000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
