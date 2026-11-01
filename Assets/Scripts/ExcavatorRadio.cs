@@ -176,7 +176,7 @@ public class ExcavatorRadio : MonoBehaviour
         label.alignment = TextAlignmentOptions.Center;
         label.color = new Color(0.72f, 0.95f, 0.72f);
         label.rectTransform.sizeDelta = size;
-        label.enableWordWrapping = false;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
         return label;
     }
 
