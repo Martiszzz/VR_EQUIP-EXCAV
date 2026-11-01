@@ -18,6 +18,16 @@ public partial class ExcavatorGrounding
     Transform plantedFrame;
     Vector3 plantedLocalPoint;
     float plantedAllowance;
+    [Min(.02f)] public float supportedRestDelay=.12f;
+    PartDriver[] supportDrivers;
+    TrackDrive supportDrive;
+    bool restingOnTool;
+    float supportedRestClock,restMass;
+    Vector3 restPosition,restToolPosition,restCenter;
+    Quaternion restRotation,restToolRotation;
+    Transform restTool;
+    readonly float[] restGround=new float[12];
+    float restToolGround;
     public int GroundedTrackPoints {get;private set;}
     public Rigidbody PhysicalBody {get;private set;}
     public bool UsesPhysicalSupport => physicalSuspension && PhysicalBody && !PhysicalBody.isKinematic;
@@ -29,6 +39,9 @@ public partial class ExcavatorGrounding
     {
         PhysicalBody=body;
         plantedFrame=null;toolSupportLoad=0;requestRemaining=0;
+        restingOnTool=false;supportedRestClock=0;
+        supportDrivers=GetComponentsInChildren<PartDriver>(true);
+        supportDrive=GetComponentInChildren<TrackDrive>(true);
         physicalTools=GetComponentsInChildren<GroundedAttachment>(true);
         physicalBucket=GetComponentInChildren<BucketInside>(true);
         body.isKinematic=false;body.useGravity=true;
@@ -64,25 +77,8 @@ public partial class ExcavatorGrounding
         AppliedLiftForce=0;RequiredLiftForce=0;
         if(massModel)massModel.Step();
         float mass=massModel?Mathf.Max(100,massModel.TotalMass):1700;
-        body.mass=mass;
         var center=massModel?massModel.CenterOfMass:Pivot+chassis.up*.55f;
-        body.centerOfMass=Quaternion.Inverse(chassis.rotation)*(center-chassis.position);
-        float length=Vector3.Distance(SupportPoint(0),SupportPoint(2));
-        float width=Vector3.Distance(SupportPoint(0),SupportPoint(6));
-        body.inertiaTensorRotation=Quaternion.identity;
-        body.inertiaTensor=new Vector3(mass*(length*length+1)/12,mass*(length*length+width*width)/12,mass*(width*width+1)/12);
         Gather(chassis.position,chassis.rotation);
-        float stiffness=mass*gravity/(12*Mathf.Max(.005f,suspensionCompression));
-        float damping=2*Mathf.Sqrt(stiffness*mass/12)*suspensionDamping;
-        for(int i=0;i<12;i++)
-        {
-            if(!found[i])continue;
-            float gap=feet[i].y-surface[i].y;
-            if(gap>contactReach)continue;
-            float force=mass*gravity/12+(groundClearance-gap)*stiffness-body.GetPointVelocity(feet[i]).y*damping;
-            force=Mathf.Clamp(force,0,mass*gravity*2.5f/12);
-            body.AddForceAtPosition(Vector3.up*force,feet[i],ForceMode.Force);
-        }
         float deepest=0,allowance=0;Vector3 point=Vector3.zero;Transform contactFrame=null;
         foreach(var tool in physicalTools)
         {
@@ -104,8 +100,28 @@ public partial class ExcavatorGrounding
             point=plantedFrame.TransformPoint(plantedLocalPoint);
             if(Ground(point,out float y)){deepest=y-point.y-plantedAllowance;supporting=deepest>=-supportReleaseGap;}
         }
+        if(supporting && TryRestOnTool(point,deepest,mass,center,dt))
+        {requestRemaining=Mathf.Max(0,requestRemaining-dt);RefreshPhysicalContact();return;}
+        if(!supporting){WakeToolSupport();toolSupportLoad=0;plantedFrame=null;}
+        // Do not rewrite rigidbody mass properties or add support forces to a sleeping, parked rig.
+        body.mass=mass;
+        body.centerOfMass=Quaternion.Inverse(chassis.rotation)*(center-chassis.position);
+        float length=Vector3.Distance(SupportPoint(0),SupportPoint(2));
+        float width=Vector3.Distance(SupportPoint(0),SupportPoint(6));
+        body.inertiaTensorRotation=Quaternion.identity;
+        body.inertiaTensor=new Vector3(mass*(length*length+1)/12,mass*(length*length+width*width)/12,mass*(width*width+1)/12);
+        float stiffness=mass*gravity/(12*Mathf.Max(.005f,suspensionCompression));
+        float damping=2*Mathf.Sqrt(stiffness*mass/12)*suspensionDamping;
+        for(int i=0;i<12;i++)
+        {
+            if(!found[i])continue;
+            float gap=feet[i].y-surface[i].y;
+            if(gap>contactReach)continue;
+            float force=mass*gravity/12+(groundClearance-gap)*stiffness-body.GetPointVelocity(feet[i]).y*damping;
+            force=Mathf.Clamp(force,0,mass*gravity*2.5f/12);
+            body.AddForceAtPosition(Vector3.up*force,feet[i],ForceMode.Force);
+        }
         if(supporting)ApplyToolForce(point,deepest,dt);
-        else {toolSupportLoad=0;plantedFrame=null;}
         requestRemaining=Mathf.Max(0,requestRemaining-dt);
         var velocity=body.linearVelocity;velocity.y=Mathf.Clamp(velocity.y,-maxFallSpeed,Mathf.Min(maxRiseSpeed,.35f));body.linearVelocity=velocity;
         float tilt=Vector3.Angle(chassis.up,SupportNormal);
@@ -116,6 +132,79 @@ public partial class ExcavatorGrounding
         }
         ConstrainTrackContact(dt);
         RefreshPhysicalContact();
+    }
+    bool SupportControlsMoving()
+    {
+        if(supportDrive && (supportDrive.RequestedFlow>.001f || Mathf.Abs(supportDrive.LeftSpeed)>.01f || Mathf.Abs(supportDrive.RightSpeed)>.01f))return true;
+        if(supportDrivers!=null)foreach(var driver in supportDrivers)
+            if(driver && driver.isActiveAndEnabled && (driver.RequestedFlow>.001f || Mathf.Abs(driver.AngularVelocity)>.01f))return true;
+        return false;
+    }
+    bool StableToolTriangle(Vector3 tool,Vector3 center)
+    {
+        // Gravity must project inside a triangle of actual track contacts and the planted tool.
+        float minimumGap=-Mathf.Max(terrainContactSkin,suspensionCompression);
+        for(int i=0;i<12;i++)if(found[i] && feet[i].y-surface[i].y < minimumGap)return false;
+        for(int a=0;a<12;a++)
+        {
+            if(!found[a] || feet[a].y-surface[a].y>groundClearance+suspensionCompression)continue;
+            for(int b=a+1;b<12;b++)
+            {
+                if(!found[b] || feet[b].y-surface[b].y>groundClearance+suspensionCompression)continue;
+                var u=feet[a]-tool;var v=feet[b]-tool;var p=center-tool;
+                float determinant=u.x*v.z-v.x*u.z;
+                if(Mathf.Abs(determinant)<.0001f)continue;
+                float x=(p.x*v.z-v.x*p.z)/determinant,y=(u.x*p.z-p.x*u.z)/determinant;
+                if(x>=0 && y>=0 && x+y<=1)return true;
+            }
+        }
+        return false;
+    }
+    bool TryRestOnTool(Vector3 point,float depth,float mass,Vector3 center,float dt)
+    {
+        var body=PhysicalBody;
+        float maximumDepth=physicalBucket && plantedFrame==physicalBucket.transform?Mathf.Max(.04f,physicalBucket.maximumToothPenetration+.015f):.04f;
+        if(SupportControlsMoving() || !plantedFrame || depth < -terrainContactSkin || depth>maximumDepth || !StableToolTriangle(point,center))
+        {WakeToolSupport();return false;}
+        var localTool=chassis.InverseTransformPoint(plantedFrame.position);
+        var localRotation=Quaternion.Inverse(chassis.rotation)*plantedFrame.rotation;
+        var localCenter=chassis.InverseTransformPoint(center);
+        if(restingOnTool)
+        {
+            bool changed=restTool!=plantedFrame || Mathf.Abs(restMass-mass)>.25f ||
+                (localCenter-restCenter).sqrMagnitude>.000004f || (localTool-restToolPosition).sqrMagnitude>.000001f ||
+                Quaternion.Angle(localRotation,restToolRotation)>.05f || (body.position-restPosition).sqrMagnitude>.0001f ||
+                Quaternion.Angle(body.rotation,restRotation)>.5f;
+            for(int i=0;i<12 && !changed;i++)
+                changed=found[i]?(float.IsNaN(restGround[i]) || Mathf.Abs(surface[i].y-restGround[i])>.002f):!float.IsNaN(restGround[i]);
+            if(!Ground(point,out float ground) || Mathf.Abs(ground-restToolGround)>.002f)changed=true;
+            if(changed || body.linearVelocity.sqrMagnitude>.04f || body.angularVelocity.sqrMagnitude>.04f)
+            {WakeToolSupport();return false;}
+        }
+        else
+        {
+            // Closed valves dissipate the remaining chassis motion while supported; otherwise an
+            // existing oscillation could continually restart the settling timer and never stop.
+            float brake=Mathf.Exp(-dt/Mathf.Max(.04f,supportedRestDelay*.5f));
+            body.linearVelocity*=brake;body.angularVelocity*=brake;
+            if(body.linearVelocity.sqrMagnitude>.04f || body.angularVelocity.sqrMagnitude>.04f)
+            {supportedRestClock=0;return false;}
+            supportedRestClock+=dt;
+            if(supportedRestClock<supportedRestDelay)return false;
+            restingOnTool=true;restTool=plantedFrame;restMass=mass;restCenter=localCenter;
+            restToolPosition=localTool;restToolRotation=localRotation;restPosition=body.position;restRotation=body.rotation;
+            for(int i=0;i<12;i++)restGround[i]=found[i]?surface[i].y:float.NaN;
+            Ground(point,out restToolGround);
+            toolSupportLoad=0;
+        }
+        // Closed hydraulic valves retain this supported pose. No per-tick forces should wake it.
+        if(!body.IsSleeping()){body.linearVelocity=Vector3.zero;body.angularVelocity=Vector3.zero;body.Sleep();}
+        return true;
+    }
+    void WakeToolSupport()
+    {
+        if(restingOnTool)PhysicalBody.WakeUp();
+        restingOnTool=false;supportedRestClock=0;
     }
     void ConstrainTrackContact(float dt)
     {
@@ -142,6 +231,7 @@ public partial class ExcavatorGrounding
     {
         if(!Ignition.EngineRunning || depth<=0 || depth>.1f || effort<=0)return;
         plantedFrame=frame?frame:chassis;plantedLocalPoint=plantedFrame.InverseTransformPoint(point);
+        WakeToolSupport();
         var contact=plantedFrame.GetComponent<GroundedAttachment>();plantedAllowance=contact?contact.softSoilDepth:0;
         requestedEffort=Mathf.Clamp01(effort);requestRemaining=.04f;
     }
@@ -160,14 +250,17 @@ public partial class ExcavatorGrounding
         float weight=PhysicalBody.mass*gravity;
         RequiredLiftForce=weight*Mathf.Max(.05f,Vector3.Dot(PhysicalBody.worldCenterOfMass-rear,direction))/arm;
         float command=requestRemaining>0?requestedEffort:0;
-        toolSupportLoad=Mathf.Max(Mathf.Max(toolSupportLoad,Mathf.Clamp01(depth/Mathf.Max(.005f,toolCompliance*.4f))),command);
+        float compression=Mathf.Clamp01(depth/Mathf.Max(.005f,toolCompliance*.4f));
+        float targetLoad=command>0?Mathf.Max(compression,command):compression;
+        toolSupportLoad=Mathf.MoveTowards(toolSupportLoad,targetLoad,dt/Mathf.Max(.04f,supportForceSmoothing));
         float cap=maximumHydraulicForce;
         var torque=Quaternion.Inverse(PhysicalBody.rotation)*Vector3.Cross(point-PhysicalBody.worldCenterOfMass,Vector3.up);
         var inertia=PhysicalBody.inertiaTensor;
         float effectiveMass=1/(1/PhysicalBody.mass+torque.x*torque.x/Mathf.Max(1,inertia.x)+torque.y*torque.y/Mathf.Max(1,inertia.y)+torque.z*torque.z/Mathf.Max(1,inertia.z));
         // Do not low-pass the velocity feedback: its delay made the blade/track supports drive
         // each other into an oscillation. Keep contact across a small unloading gap instead.
-        float desiredSpeed=Mathf.Clamp(depth/Mathf.Max(.06f,supportForceSmoothing)+command*plantedToolSpeed,-plantedToolSpeed,plantedToolSpeed);
+        float error=Mathf.Sign(depth)*Mathf.Max(0,Mathf.Abs(depth)-terrainContactSkin);
+        float desiredSpeed=Mathf.Clamp(error/Mathf.Max(.06f,supportForceSmoothing)+command*plantedToolSpeed,-plantedToolSpeed,plantedToolSpeed);
         float force=Mathf.Clamp(toolSupportLoad*RequiredLiftForce+effectiveMass*(desiredSpeed-PhysicalBody.GetPointVelocity(point).y)/Mathf.Max(.001f,dt*1.5f),0,cap);
         if(Vector3.Angle(chassis.up,SupportNormal)>=maxHydraulicTilt && force>RequiredLiftForce)force=RequiredLiftForce;
         AppliedLiftForce=force;HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(force/maximumHydraulicForce));

@@ -69,6 +69,9 @@ public class PartDriver : MonoBehaviour
             next = Mathf.Clamp(next, minAngle, maxAngle);
             if ((next >= maxAngle && angularVelocity > 0) || (next <= minAngle && angularVelocity < 0)) angularVelocity = 0;
         }
+        // Rewriting an unchanged child collider pose wakes the sleeping chassis every tick.
+        if(Mathf.Abs(next-angle)<.00001f && Mathf.Abs(angularVelocity)<.001f)
+        {angularVelocity=0;return;}
         float from = angle;
         int steps = probe!=null?probe.MotionSteps(next-from):Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(next-from)/.25f),1,64);
         for (int i = 1; i <= steps; i++)

@@ -78,3 +78,14 @@ Papildymas peržiūrėtas pagal kodą, be Unity paleidimo ir automatinių bandym
 - Controls mygtukas atidaro ir uždaro gidą. Kiti meniu pasirinkimai nebeužrakinami; gidas su nepermatomu fonu piešiamas paskutinis ir 3D meniu padedamas prieš konsolę, kad neužstotų Close mygtuko bei nepersidengtų su TRAINING YARD užrašu.
 
 Po atnaujinimo Play sustabdyti ir sceną paleisti iš naujo. Šio papildymo veikimą žaidime dar turi patvirtinti naudotojas.
+
+## Atrama atleidus svirtį
+
+Šis papildymas peržiūrėtas pagal logiką; Unity ir automatiniai bandymai nepaleisti pagal naudotojo ankstesnį prašymą.
+
+- Atleidus valdymą nebeišlaikoma didžiausia kada nors paprašyta kėlimo apkrova. Slėgio tikslas grįžta prie esamo kontakto suspaudimo, o kelių milimetrų kontaktinė paklaida nebekuria naujo kėlimo greičio.
+- Įrankiu ir vikšrais stabiliai paremta važiuoklė turi ramybės būseną, atitinkančią uždarytus hidraulinius vožtuvus. Masės centro projekcija turi patekti į tikrų atramų trikampį. Nebūnant valdymo komandos slopinama likusi eiga ir po `supportedRestDelay=0.12` s kūnas užmigdomas; jam nebesiunčiamos vikšrų / įrankio jėgos ir kas žingsnį neperrašomos masės savybės. Ore ar be stabilios atramos tokia būsena neįjungiama.
+- Pajudinus svirtis, dar stabdant varikliukui ar vikšrams, pasikeitus įrankio pozai, kroviniui, masių centrui, atramos aukščiui arba įvykus didesniam išoriniam judesiui ramybės būsena nutraukiama.
+- `PartDriver` nebeperrašo nepasikeitusios koliderio pozos, kai sąnarys visiškai sustojęs: toks perrašymas galėjo vėl pažadinti važiuoklę kiekviename fizikos žingsnyje.
+
+Rankiniam bandymui po naujo Play paleidimo: nuleisti peilį, pakelti priekinę važiuoklės dalį, visiškai atleisti svirtį ir palaukti; pakartoti atrėmus kaušą. Tada pajudinti svirtį ir patikrinti, kad atramos laikymas iškart atleidžiamas.
