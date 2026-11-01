@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 // Transform-driven hydraulics use explicit terrain constraints; CCD alone cannot stop a teleported pose.
 [DefaultExecutionOrder(-100)]
@@ -8,6 +9,7 @@ public class ExcavatorContacts : MonoBehaviour
     public bool forceBasedChassis=true;
     [Range(0,.1f)] public float softGripperDepth=.06f;
     PhysicsMaterial contactMaterial;
+    readonly HashSet<MeshFilter> shapedJaws=new HashSet<MeshFilter>();
     public void Awake() { Initialize(); }
     public void Initialize()
     {
@@ -38,14 +40,15 @@ public class ExcavatorContacts : MonoBehaviour
             foreach(var jaw in claw.jaws)
             {
                 if(!jaw.part)continue;
-                foreach(var filter in jaw.part.GetComponentsInChildren<MeshFilter>(true))AddContact(filter.transform,false);
+                foreach(var filter in jaw.part.GetComponentsInChildren<MeshFilter>(true))
+                {AddContact(filter.transform,false);ShapeJawContacts(filter);}
                 var contact=jaw.part.GetComponent<GroundedAttachment>();
                 if(!contact)contact=jaw.part.gameObject.AddComponent<GroundedAttachment>();
                 contact.includeChildren=true;contact.canPushSoil=false;
                 contact.aggregateParent=null;
                 contact.canScrapeSoil=true;contact.softSoilDepth=softGripperDepth;
                 foreach(var part in jaw.part.GetComponentsInChildren<GroundedAttachment>())
-                {part.canScrapeSoil=true;part.softSoilDepth=softGripperDepth;if(part!=contact)part.aggregateParent=contact;}
+                {part.canScrapeSoil=true;part.softSoilDepth=softGripperDepth;part.surfaceSampleSteps=1;if(part!=contact)part.aggregateParent=contact;}
             }
         }
         if(addKinematicBody)
@@ -65,7 +68,7 @@ public class ExcavatorContacts : MonoBehaviour
         var terrain=GetComponent<ExcavatorGrounding>();var terrainCollider=terrain && terrain.terrain?terrain.terrain.GetComponent<TerrainCollider>():null;
         foreach(var collider in GetComponentsInChildren<Collider>(true))
         {
-            if(collider.isTrigger)continue;
+            if(!collider.enabled || collider.isTrigger)continue;
             collider.sharedMaterial=contactMaterial;
             // Terrain uses suspension/tool forces and deformation, not kinematic depenetration impulses.
             if(terrainCollider)Physics.IgnoreCollision(collider,terrainCollider,true);
@@ -80,6 +83,44 @@ public class ExcavatorContacts : MonoBehaviour
         }
     }
     void OnDestroy(){if(contactMaterial){if(Application.isPlaying)Destroy(contactMaterial);else DestroyImmediate(contactMaterial);}}
+    void ShapeJawContacts(MeshFilter filter)
+    {
+        var mesh=filter.sharedMesh;
+        if(!mesh || !mesh.isReadable || shapedJaws.Contains(filter))return;
+        foreach(var collider in filter.GetComponents<Collider>())if(collider.enabled && !collider.isTrigger && !(collider is BoxCollider))return;
+        var vertices=mesh.vertices;if(vertices.Length==0)return;
+        const int sections=16;
+        var bounds=new Bounds[sections];var used=new bool[sections];var innerRadius=new float[sections];
+        var origin=mesh.bounds.center;
+        for(int i=0;i<sections;i++)innerRadius[i]=float.PositiveInfinity;
+        foreach(var vertex in vertices)
+        {
+            var offset=vertex-origin;
+            float angle=Mathf.Atan2(offset.y,offset.z);
+            int section=Mathf.Clamp(Mathf.FloorToInt((angle+Mathf.PI)/(2*Mathf.PI)*sections),0,sections-1);
+            float middle=-Mathf.PI+(section+.5f)*(2*Mathf.PI/sections);
+            var rotation=Quaternion.AngleAxis(-middle*Mathf.Rad2Deg,Vector3.right);
+            var p=Quaternion.Inverse(rotation)*offset;
+            if(!used[section]){bounds[section]=new Bounds(p,Vector3.zero);used[section]=true;}else bounds[section].Encapsulate(p);
+            innerRadius[section]=Mathf.Min(innerRadius[section],new Vector2(offset.y,offset.z).magnitude);
+        }
+        foreach(var collider in filter.GetComponents<BoxCollider>())if(!collider.isTrigger)collider.enabled=false;
+        var scale=filter.transform.lossyScale;
+        var minimum=new Vector3(.001f/Mathf.Max(.0001f,Mathf.Abs(scale.x)),.001f/Mathf.Max(.0001f,Mathf.Abs(scale.y)),.001f/Mathf.Max(.0001f,Mathf.Abs(scale.z)));
+        for(int i=0;i<sections;i++)
+        {
+            if(!used[i])continue;
+            float angle=-Mathf.PI+(i+.5f)*(2*Mathf.PI/sections);
+            var rotation=Quaternion.AngleAxis(-angle*Mathf.Rad2Deg,Vector3.right);
+            var b=bounds[i];var low=b.min;
+            // Keep the curved inner opening clear, rather than bridging it with an enclosing box.
+            low.z=Mathf.Min(innerRadius[i],b.max.z-minimum.z);b.SetMinMax(low,b.max);
+            var go=new GameObject("Jaw contact "+i);go.layer=filter.gameObject.layer;go.transform.SetParent(filter.transform,false);
+            go.transform.localPosition=origin+rotation*b.center;go.transform.localRotation=rotation;
+            var box=go.AddComponent<BoxCollider>();box.size=Vector3.Max(b.size,minimum);box.contactOffset=.001f;
+        }
+        shapedJaws.Add(filter);
+    }
     static void Configure(Rigidbody body)
     {
         body.isKinematic=true;body.useGravity=false;

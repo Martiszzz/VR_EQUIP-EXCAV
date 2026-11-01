@@ -23,10 +23,11 @@ public partial class ExcavatorGrounding
     TrackDrive supportDrive;
     bool restingOnTool;
     float supportedRestClock,restMass;
-    Vector3 restPosition,restToolPosition,restCenter;
+    Vector3 restPosition,restToolPosition;
     Quaternion restRotation,restToolRotation;
     Transform restTool;
     readonly float[] restGround=new float[12];
+    readonly Vector3[] supportPolygon=new Vector3[15];
     float restToolGround;
     public int GroundedTrackPoints {get;private set;}
     public Rigidbody PhysicalBody {get;private set;}
@@ -137,26 +138,44 @@ public partial class ExcavatorGrounding
     {
         if(supportDrive && (supportDrive.RequestedFlow>.001f || Mathf.Abs(supportDrive.LeftSpeed)>.01f || Mathf.Abs(supportDrive.RightSpeed)>.01f))return true;
         if(supportDrivers!=null)foreach(var driver in supportDrivers)
-            if(driver && driver.isActiveAndEnabled && (driver.RequestedFlow>.001f || Mathf.Abs(driver.AngularVelocity)>.01f))return true;
+        {
+            if(!driver || !driver.isActiveAndEnabled)continue;
+            // Slewing the upper structure does not open the undercarriage blade's hydraulic valve.
+            if(driver.useWorldAxis && driver.target && plantedFrame && !plantedFrame.IsChildOf(driver.target))continue;
+            if(driver.RequestedFlow>.001f || Mathf.Abs(driver.AngularVelocity)>.01f)return true;
+        }
         return false;
     }
     bool StableToolTriangle(Vector3 tool,Vector3 center)
     {
-        // Gravity must project inside a triangle of actual track contacts and the planted tool.
+        int count=0;
         float minimumGap=-Mathf.Max(terrainContactSkin,suspensionCompression);
-        for(int i=0;i<12;i++)if(found[i] && feet[i].y-surface[i].y < minimumGap)return false;
-        for(int a=0;a<12;a++)
+        for(int i=0;i<12;i++)
         {
-            if(!found[a] || feet[a].y-surface[a].y>groundClearance+suspensionCompression)continue;
-            for(int b=a+1;b<12;b++)
-            {
-                if(!found[b] || feet[b].y-surface[b].y>groundClearance+suspensionCompression)continue;
-                var u=feet[a]-tool;var v=feet[b]-tool;var p=center-tool;
-                float determinant=u.x*v.z-v.x*u.z;
-                if(Mathf.Abs(determinant)<.0001f)continue;
-                float x=(p.x*v.z-v.x*p.z)/determinant,y=(u.x*p.z-p.x*u.z)/determinant;
-                if(x>=0 && y>=0 && x+y<=1)return true;
-            }
+            if(!found[i])continue;
+            float gap=feet[i].y-surface[i].y;
+            if(gap<minimumGap)return false;
+            if(gap<=groundClearance+suspensionCompression)supportPolygon[count++]=feet[i];
+        }
+        supportPolygon[count++]=tool;
+        // Include the blade's contacting corners so a sideways arm load can remain supported.
+        var blade=massModel?massModel.blade:null;
+        bool broadBlade=blade && plantedFrame && (plantedFrame==blade || plantedFrame.IsChildOf(blade));
+        var patch=broadBlade?plantedFrame.GetComponent<GroundedAttachment>():null;
+        float halfWidth=patch?patch.WorkBounds.size.x*Mathf.Abs(plantedFrame.lossyScale.x)*.45f:0;
+        if(halfWidth>0)for(int side=-1;side<=1;side+=2)
+        {
+            var edge=tool+plantedFrame.right*(side*halfWidth);
+            if(Ground(edge,out float height) && height-edge.y>=-supportReleaseGap && height-edge.y<=.04f)
+                supportPolygon[count++]=edge;
+        }
+        for(int a=0;a<count-2;a++)for(int b=a+1;b<count-1;b++)for(int c=b+1;c<count;c++)
+        {
+            var origin=supportPolygon[a];var u=supportPolygon[b]-origin;var v=supportPolygon[c]-origin;var p=center-origin;
+            float determinant=u.x*v.z-v.x*u.z;
+            if(Mathf.Abs(determinant)<.0001f)continue;
+            float x=(p.x*v.z-v.x*p.z)/determinant,y=(u.x*p.z-p.x*u.z)/determinant;
+            if(x>=-.001f && y>=-.001f && x+y<=1.001f)return true;
         }
         return false;
     }
@@ -168,11 +187,10 @@ public partial class ExcavatorGrounding
         {WakeToolSupport();return false;}
         var localTool=chassis.InverseTransformPoint(plantedFrame.position);
         var localRotation=Quaternion.Inverse(chassis.rotation)*plantedFrame.rotation;
-        var localCenter=chassis.InverseTransformPoint(center);
         if(restingOnTool)
         {
             bool changed=restTool!=plantedFrame || Mathf.Abs(restMass-mass)>.25f ||
-                (localCenter-restCenter).sqrMagnitude>.000004f || (localTool-restToolPosition).sqrMagnitude>.000001f ||
+                (localTool-restToolPosition).sqrMagnitude>.000001f ||
                 Quaternion.Angle(localRotation,restToolRotation)>.05f || (body.position-restPosition).sqrMagnitude>.0001f ||
                 Quaternion.Angle(body.rotation,restRotation)>.5f;
             for(int i=0;i<12 && !changed;i++)
@@ -191,11 +209,11 @@ public partial class ExcavatorGrounding
             {supportedRestClock=0;return false;}
             supportedRestClock+=dt;
             if(supportedRestClock<supportedRestDelay)return false;
-            restingOnTool=true;restTool=plantedFrame;restMass=mass;restCenter=localCenter;
+            restingOnTool=true;restTool=plantedFrame;restMass=mass;
             restToolPosition=localTool;restToolRotation=localRotation;restPosition=body.position;restRotation=body.rotation;
             for(int i=0;i<12;i++)restGround[i]=found[i]?surface[i].y:float.NaN;
             Ground(point,out restToolGround);
-            toolSupportLoad=0;
+            // Retain the supported load for a continuous hand-off when driving or moving the tool.
         }
         // Closed hydraulic valves retain this supported pose. No per-tick forces should wake it.
         if(!body.IsSleeping()){body.linearVelocity=Vector3.zero;body.angularVelocity=Vector3.zero;body.Sleep();}

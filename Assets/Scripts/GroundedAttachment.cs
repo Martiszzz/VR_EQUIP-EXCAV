@@ -6,6 +6,7 @@ public class GroundedAttachment : MonoBehaviour
     public bool includeChildren = true;
     public bool canPushSoil = true;
     public bool canScrapeSoil;
+    [Range(1,2)] public int surfaceSampleSteps=2;
     [Range(0,.1f)] public float softSoilDepth;
     [System.NonSerialized] public GroundedAttachment aggregateParent;
     public bool CoveredByParent => aggregateParent && aggregateParent.isActiveAndEnabled && aggregateParent.includeChildren;
@@ -48,12 +49,13 @@ public class GroundedAttachment : MonoBehaviour
                 Consider(terrain,c.bounds.min,ref depth,ref contact,ref contactCount);
                 Consider(terrain,new Vector3(c.bounds.center.x,c.bounds.min.y,c.bounds.center.z),ref depth,ref contact,ref contactCount);continue;
             }
-            for (int x = -2; x <= 2; x++)
-            for (int y = -2; y <= 2; y++)
-            for (int z = -2; z <= 2; z++)
+            int steps=Mathf.Clamp(surfaceSampleSteps,1,2);
+            for (int x = -steps; x <= steps; x++)
+            for (int y = -steps; y <= steps; y++)
+            for (int z = -steps; z <= steps; z++)
             {
-                if (Mathf.Abs(x) < 2 && Mathf.Abs(y) < 2 && Mathf.Abs(z) < 2) continue;
-                Consider(terrain,c.transform.TransformPoint(local.center+Vector3.Scale(local.extents*.5f,new Vector3(x,y,z))),ref depth,ref contact,ref contactCount);
+                if (Mathf.Abs(x) < steps && Mathf.Abs(y) < steps && Mathf.Abs(z) < steps) continue;
+                Consider(terrain,c.transform.TransformPoint(local.center+Vector3.Scale(local.extents/steps,new Vector3(x,y,z))),ref depth,ref contact,ref contactCount);
             }
         }
         return depth;

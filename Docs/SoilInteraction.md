@@ -89,3 +89,14 @@ Po atnaujinimo Play sustabdyti ir sceną paleisti iš naujo. Šio papildymo veik
 - `PartDriver` nebeperrašo nepasikeitusios koliderio pozos, kai sąnarys visiškai sustojęs: toks perrašymas galėjo vėl pažadinti važiuoklę kiekviename fizikos žingsnyje.
 
 Rankiniam bandymui po naujo Play paleidimo: nuleisti peilį, pakelti priekinę važiuoklės dalį, visiškai atleisti svirtį ir palaukti; pakartoti atrėmus kaušą. Tada pajudinti svirtį ir patikrinti, kad atramos laikymas iškart atleidžiamas.
+
+## Kabinos sukimas su atrėmtu peiliu ir glaudus rąsto suėmimas
+
+Pakeitimai peržiūrėti pagal kodą; Unity ir automatiniai bandymai nepaleisti.
+
+- Kabinos sukimo komanda nebeatleidžia nejudančio važiuoklės peilio atramos. Judantis masių centras tikrinamas pagal dabartinį atramos plotą, bet vien jo pasislinkimas nebeperjungia važiuoklės į laisvą eigą. Į atramos plotą įtraukti ir abu su gruntu besiliečiantys peilio kraštai. Iš ramybės būsenos išeinant išsaugoma buvusi atramos apkrova, kad pereinant į jėgų valdymą ji nenukristų iki nulio.
+- Žnyplių bendrosios apgaubiančios dėžės pakeičiamos iki 16 mažų pasuktų kontaktų vienam tinkleliui, sudarytų iš modelio viršūnių pagal lenktą žnyplės formą. Vidinė išlinkimo ertmė nebeuždaroma viena didele dėže. `cover3.fbx` įjungtas Read/Write duomenų pasiekiamumas šiam vienkartiniam kontaktų paruošimui; žnyplių grunto patikra naudoja retesnius mėginius ant šių mažų kontaktų.
+- Atsirėmus į rąstą paliekama iki kontakto leistina uždarymo judesio dalis, o ne atitraukiama per visą kampo žingsnį. Numatyta suėmimo kontakto tolerancija sumažinta iki 2 mm; išliko du priešingi kontaktai ir patvirtinimo laikas.
+- Paimtas rąstas tiksliai seka išsaugotą vietinę laikymo pozą. Jo laikinos kolizijos su pačia mašina išjungiamos, kad kinematinis rąstas nestumdytų dinaminės važiuoklės; paleidus atkuriamos ankstesnės porų kolizijos, interpoliacija ir CCD režimas.
+
+Po modelio importo Play paleisti iš naujo. Rankiniu būdu patikrinti abiejų lygių kabinos sukimą su nuleistu peiliu ir skirtingo storio rąstų suėmimą antrame lygyje.

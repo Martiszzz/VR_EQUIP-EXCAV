@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 
+using System.Collections.Generic;
+
 public class Claw : MonoBehaviour
 {
     [System.Serializable]
@@ -32,7 +34,7 @@ public class Claw : MonoBehaviour
     [Min(0.02f)] public float gripRadius = 0.25f;
     public LayerMask grabMask = ~0;
     [Min(.02f)] public float gripConfirmTime=.08f;
-    [Min(.001f)] public float gripContactSkin=.006f;
+    [Min(.001f)] public float gripContactSkin=.002f;
     Rigidbody pendingGrip;
     float pendingGripTime;
 
@@ -56,6 +58,12 @@ public class Claw : MonoBehaviour
 
     Rigidbody held;
     bool heldWasKinematic;
+    RigidbodyInterpolation heldInterpolation;
+    CollisionDetectionMode heldCollisionMode;
+    Vector3 heldLocalPosition;
+    Quaternion heldLocalRotation;
+    struct HeldCollision {public Collider log,machine;public bool ignored;}
+    readonly List<HeldCollision> heldCollisionPairs=new List<HeldCollision>();
     Vector3 lastGrip, gripVelocity;
     readonly Collider[] buffer = new Collider[32];
     float[] previous;
@@ -76,6 +84,7 @@ public class Claw : MonoBehaviour
 
     void FixedUpdate()
     {
+        SyncHeldPose();
         float dt = Time.fixedDeltaTime;
         if (grip)
         {
@@ -110,6 +119,13 @@ public class Claw : MonoBehaviour
         Closed = max;
     }
 
+    void LateUpdate(){SyncHeldPose();}
+    void SyncHeldPose()
+    {
+        if(!held || !grip)return;
+        held.position=grip.TransformPoint(heldLocalPosition);
+        held.rotation=grip.rotation*heldLocalRotation;
+    }
     void MoveJaws(float d,float stepTime)
     {
         if (previous == null || previous.Length != jaws.Length) previous = new float[jaws.Length];
@@ -149,8 +165,8 @@ public class Claw : MonoBehaviour
             if (!j.part || j.groundBlocked) continue;
             if (Scan(j, out var rb))
             {
-                j.amount = previous[i];
-                ApplyPose(j);
+                if(rb && !rb.isKinematic)SeatAtContact(j,previous[i]);
+                else {j.amount=previous[i];ApplyPose(j);}
                 j.blocked = true;
                 j.touching = rb;
             }
@@ -160,6 +176,21 @@ public class Claw : MonoBehaviour
         if (!held) TryGrab(stepTime);
     }
 
+    void SeatAtContact(Jaw jaw,float start)
+    {
+        float low=start,high=jaw.amount;
+        var a=jaw.contactCollider;var b=jaw.touchingCollider;
+        if(!a || !b){jaw.amount=start;ApplyPose(jaw);return;}
+        // Retain the admissible part of closing: a whole-step rollback left a visible gap even
+        // though the proposed pose had already touched the log.
+        for(int i=0;i<7;i++)
+        {
+            jaw.amount=(low+high)*.5f;ApplyPose(jaw);
+            bool overlap=Physics.ComputePenetration(a,a.transform.position,a.transform.rotation,b,b.transform.position,b.transform.rotation,out _,out float depth);
+            if(overlap && depth>penetrationTolerance)high=jaw.amount;else low=jaw.amount;
+        }
+        jaw.amount=low;ApplyPose(jaw);
+    }
     static void ApplyPose(Jaw j)
     {
         float angle = Mathf.Lerp(j.openAngle, j.closedAngle, j.amount);
@@ -285,13 +316,27 @@ public class Claw : MonoBehaviour
         held = candidate;
         pendingGrip=null;pendingGripTime=0;
         heldWasKinematic = candidate.isKinematic;
+        heldInterpolation=candidate.interpolation;heldCollisionMode=candidate.collisionDetectionMode;
         candidate.linearVelocity = Vector3.zero;
         candidate.angularVelocity = Vector3.zero;
-        candidate.isKinematic = true;
+        candidate.collisionDetectionMode=CollisionDetectionMode.ContinuousSpeculative;
+        candidate.interpolation=RigidbodyInterpolation.None;candidate.isKinematic = true;
         candidate.transform.SetParent(grip, true);
+        heldLocalPosition=candidate.transform.localPosition;heldLocalRotation=candidate.transform.localRotation;
         var contact=candidate.GetComponent<GroundedAttachment>();if(!contact)contact=candidate.gameObject.AddComponent<GroundedAttachment>();
         contact.canPushSoil=false;
         heldColliders=candidate.GetComponentsInChildren<Collider>();
+        var machine=GetComponentInParent<ExcavatorGrounding>();
+        if(machine)foreach(var collider in machine.GetComponentsInChildren<Collider>())
+        {
+            if(!collider.enabled || collider.isTrigger || collider.attachedRigidbody==held)continue;
+            foreach(var log in heldColliders)
+            {
+                if(!log.enabled || log.isTrigger)continue;
+                heldCollisionPairs.Add(new HeldCollision{log=log,machine=collider,ignored=Physics.GetIgnoreCollision(log,collider)});
+                Physics.IgnoreCollision(log,collider,true);
+            }
+        }
         var terrain=DigSystem.I && DigSystem.I.terrain?DigSystem.I.terrain.GetComponent<TerrainCollider>():null;
         if(terrain)foreach(var collider in heldColliders)Physics.IgnoreCollision(collider,terrain,true);
     }
@@ -299,8 +344,12 @@ public class Claw : MonoBehaviour
     void Release()
     {
         if (!held) return;
+        SyncHeldPose();
         held.transform.SetParent(null, true);
         held.isKinematic = heldWasKinematic;
+        held.interpolation=heldInterpolation;held.collisionDetectionMode=heldCollisionMode;
+        foreach(var pair in heldCollisionPairs)if(pair.log && pair.machine)Physics.IgnoreCollision(pair.log,pair.machine,pair.ignored);
+        heldCollisionPairs.Clear();
         var terrain=DigSystem.I && DigSystem.I.terrain?DigSystem.I.terrain.GetComponent<TerrainCollider>():null;
         if(terrain && heldColliders!=null)foreach(var collider in heldColliders)if(collider)Physics.IgnoreCollision(collider,terrain,false);
         held.linearVelocity = Vector3.ClampMagnitude(gripVelocity, 1.2f);held.angularVelocity=Vector3.zero;
