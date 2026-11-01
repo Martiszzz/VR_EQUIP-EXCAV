@@ -7688,7 +7688,7 @@ Transform:
   m_GameObject: {fileID: 893401100001}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0.7071068, z: 0, w: 0}
-  m_LocalPosition: {x: 0.033, y: 0.153, z: 0.37}
+  m_LocalPosition: {x: 0.02, y: 0.19249, z: 0.36625}
   m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -7717,10 +7717,8 @@ MonoBehaviour:
     frequency: 103.2
     clip: {fileID: 8300000, guid: 307dcd44b9584de09d6b373eb1db5bad, type: 3}
   displayFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  panelMaterial: {fileID: 2100000, guid: 264f3eb628b44e34b1787f0d81d9cd43, type: 2}
-  controlMaterial: {fileID: 2100000, guid: 555ee3a3c0b84ac59e3c597b82c78ebf, type: 2}
   screenMaterial: {fileID: 2100000, guid: 85b6c864c3754b91a53efa8512aa5c69, type: 2}
-  requiresEngine: 1
+  requiresEngine: 0
   powerOn: 0
   volume: 0.35
   stationIndex: 0

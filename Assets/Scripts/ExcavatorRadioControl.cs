@@ -4,11 +4,11 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 public class ExcavatorRadioControl : MonoBehaviour
 {
-    public enum Action { Power, Previous, Next, Volume, Tune }
+    public enum Action { Power, Previous, Next, Volume, Tune, Preset1, Preset2, Preset3, VolumeDown, VolumeUp }
     ExcavatorRadio radio;
     Action action;
     XRSimpleInteractable interactable;
-    Quaternion restRotation, previousHand;
+    Quaternion previousHand;
     bool held;
     float tuningTravel;
 
@@ -17,7 +17,6 @@ public class ExcavatorRadioControl : MonoBehaviour
         radio = owner;
         action = controlAction;
         interactable = target;
-        restRotation = transform.localRotation;
         interactable.selectEntered.AddListener(OnSelected);
     }
 
@@ -26,6 +25,11 @@ public class ExcavatorRadioControl : MonoBehaviour
         if (action == Action.Power) radio.TogglePower();
         else if (action == Action.Previous) radio.ChangeStation(-1);
         else if (action == Action.Next) radio.ChangeStation(1);
+        else if (action == Action.Preset1) radio.SelectStation(0);
+        else if (action == Action.Preset2) radio.SelectStation(1);
+        else if (action == Action.Preset3) radio.SelectStation(2);
+        else if (action == Action.VolumeDown) radio.AdjustVolume(-27);
+        else if (action == Action.VolumeUp) radio.AdjustVolume(27);
     }
 
     void Update()
@@ -53,11 +57,6 @@ public class ExcavatorRadioControl : MonoBehaviour
         }
         previousHand = rotation;
         held = true;
-    }
-
-    public void SetAngle(float angle)
-    {
-        transform.localRotation = Quaternion.AngleAxis(-angle, Vector3.forward) * restRotation;
     }
 
     void OnDisable() { held = false; tuningTravel = 0; }

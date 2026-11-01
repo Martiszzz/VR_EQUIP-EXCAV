@@ -17,10 +17,8 @@ public class ExcavatorRadio : MonoBehaviour
 
     public Station[] stations;
     public TMP_FontAsset displayFont;
-    public Material panelMaterial;
-    public Material controlMaterial;
     public Material screenMaterial;
-    public bool requiresEngine = true;
+    public bool requiresEngine;
     public bool powerOn;
     [Range(0, 1)] public float volume = 0.35f;
     public int stationIndex;
@@ -28,14 +26,14 @@ public class ExcavatorRadio : MonoBehaviour
     AudioSource music, staticSource;
     AudioClip noise;
     TextMeshPro display;
-    ExcavatorRadioControl volumeKnob, tuningKnob;
     float tuningUntil;
+    float volumeDisplayUntil;
     bool receiving;
     string lastText;
 
     void Awake()
     {
-        BuildPanel();
+        BindModelControls();
         music = CreateSource("Radio broadcast");
         staticSource = CreateSource("Radio tuning");
         // Short, deterministic noise buffer; never synthesize on the audio thread.
@@ -86,16 +84,25 @@ public class ExcavatorRadio : MonoBehaviour
         music.volume = Mathf.MoveTowards(music.volume, powered && !tuning ? volume * 0.7f : 0, Time.unscaledDeltaTime * 2);
         staticSource.volume = powered ? volume * 0.55f : 0;
 
-        string text = requiresEngine && !Ignition.EngineRunning ? "IGNITION OFF" : !powerOn ? "RADIO OFF" :
+        string text = requiresEngine && !Ignition.EngineRunning ? "ENGINE\nOFF" : !powerOn ? "RADIO\nOFF" :
             stations == null || stations.Length == 0 ? "NO STATIONS" :
-            tuning ? "TUNING..." : stations[stationIndex].frequency + " FM\n" + stations[stationIndex].name;
+            tuning ? "FM\n..." : Time.unscaledTime < volumeDisplayUntil ? "VOL\n" + Mathf.RoundToInt(volume * 100) :
+            "FM\n" + stations[stationIndex].frequency;
         if (text != lastText) { display.text = text; lastText = text; }
-        volumeKnob.SetAngle(Mathf.Lerp(-135, 135, volume));
-        tuningKnob.SetAngle(stationIndex * 45);
     }
 
     public void TogglePower() { powerOn = !powerOn; }
-    public void AdjustVolume(float degrees) { volume = Mathf.Clamp01(volume + degrees / 270); }
+    public void AdjustVolume(float degrees)
+    {
+        volume = Mathf.Clamp01(volume + degrees / 270);
+        volumeDisplayUntil = Time.unscaledTime + 1.2f;
+    }
+    public void SelectStation(int index)
+    {
+        if (stations == null || stations.Length == 0) return;
+        stationIndex = Mathf.Clamp(index, 0, stations.Length - 1);
+        if (receiving) Tune();
+    }
     public void ChangeStation(int direction)
     {
         if (stations == null || stations.Length == 0) return;
@@ -125,43 +132,30 @@ public class ExcavatorRadio : MonoBehaviour
 
     void OnDestroy() { if (noise) Destroy(noise); }
 
-    GameObject Shape(string shapeName, PrimitiveType primitive, Vector3 position, Vector3 scale, Material material)
+    void Control(string controlName, Vector3 position, Vector3 size, ExcavatorRadioControl.Action action)
     {
-        var go = GameObject.CreatePrimitive(primitive);
-        go.name = shapeName;
+        var go = new GameObject(controlName);
+        // Register with XRI only after its explicit collider list is configured.
+        go.SetActive(false);
         go.transform.SetParent(transform, false);
         go.transform.localPosition = position;
-        go.transform.localScale = scale;
-        go.GetComponent<Renderer>().sharedMaterial = material;
-        // Cab controls must never add solid contacts to the excavator body.
-        go.GetComponent<Collider>().isTrigger = true;
-        return go;
-    }
-
-    ExcavatorRadioControl Control(string controlName, Vector3 position, bool knob, ExcavatorRadioControl.Action action)
-    {
-        var go = Shape(controlName, knob ? PrimitiveType.Cylinder : PrimitiveType.Cube, position,
-            knob ? new Vector3(0.035f, 0.009f, 0.035f) : new Vector3(0.032f, 0.018f, 0.014f), controlMaterial);
-        if (knob) go.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        var collider = go.AddComponent<BoxCollider>();
+        collider.size = size;
+        // XRI rays ignore triggers in these scenes. A queryable solid collider with
+        // all contact layers excluded supports ray queries without vehicle forces.
+        collider.excludeLayers = ~0;
+        // Direct interactors may use OnTrigger events instead of overlap queries.
+        // Keep a separate trigger with normal contact filtering for those hands.
+        var touchCollider = go.AddComponent<BoxCollider>();
+        touchCollider.size = size;
+        touchCollider.isTrigger = true;
         var interactable = go.AddComponent<XRSimpleInteractable>();
         interactable.colliders.Clear();
-        interactable.colliders.Add(go.GetComponent<Collider>());
+        interactable.colliders.Add(collider);
+        interactable.colliders.Add(touchCollider);
         var control = go.AddComponent<ExcavatorRadioControl>();
         control.Initialize(this, action, interactable);
-        if (knob)
-        {
-            var mark = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            mark.name = "Dial marker";
-            mark.transform.SetParent(go.transform, false);
-            mark.transform.localPosition = new Vector3(0, -0.55f, 0.28f);
-            mark.transform.localScale = new Vector3(0.08f, 0.08f, 0.3f);
-            mark.GetComponent<Renderer>().sharedMaterial = screenMaterial;
-            // Remove only this visual marker's collider, not the interactive dial.
-            mark.SetActive(false);
-            Destroy(mark.GetComponent<Collider>());
-            mark.SetActive(true);
-        }
-        return control;
+        go.SetActive(true);
     }
 
     TextMeshPro Label(string labelName, string text, Vector3 position, Vector2 size, float fontSize)
@@ -180,20 +174,35 @@ public class ExcavatorRadio : MonoBehaviour
         return label;
     }
 
-    void BuildPanel()
+    void BindModelControls()
     {
-        var body = Shape("Radio fascia", PrimitiveType.Cube, Vector3.zero, new Vector3(0.30f, 0.095f, 0.012f), panelMaterial);
-        body.GetComponent<Collider>().enabled = false;
-        var screen = Shape("Radio LCD", PrimitiveType.Cube, new Vector3(0, 0.014f, -0.008f), new Vector3(0.165f, 0.043f, 0.003f), screenMaterial);
+        // Positions measured from Head2.fbx's existing radio: two knobs, eight
+        // bottom-row buttons and the original FM 100.1 display. No replacement case.
+        Control("Original radio volume knob", new Vector3(-0.049818f, 0, -0.001f),
+            new Vector3(0.018f, 0.018f, 0.012f), ExcavatorRadioControl.Action.Volume);
+        Control("Original radio tuning knob", new Vector3(-0.033215f, 0.010695f, -0.001f),
+            new Vector3(0.015f, 0.015f, 0.012f), ExcavatorRadioControl.Action.Tune);
+
+        var actions = new[] { ExcavatorRadioControl.Action.Power, ExcavatorRadioControl.Action.Previous,
+            ExcavatorRadioControl.Action.Next, ExcavatorRadioControl.Action.Preset1,
+            ExcavatorRadioControl.Action.Preset2, ExcavatorRadioControl.Action.Preset3,
+            ExcavatorRadioControl.Action.VolumeDown, ExcavatorRadioControl.Action.VolumeUp };
+        for (int i = 0; i < actions.Length; i++)
+            Control("Original radio button " + (i + 1) + " - " + actions[i],
+                new Vector3(-0.05812f + i * 0.016604f, -0.016044f, -0.001f),
+                new Vector3(0.011f, 0.011f, 0.012f), actions[i]);
+
+        // Replace only the printed LCD content. The case and all buttons remain
+        // the original mesh; a thin screen surface hides its baked '100.1' text.
+        var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        screen.name = "Original radio LCD content";
+        screen.transform.SetParent(transform, false);
+        screen.transform.localPosition = new Vector3(0.0332f, 0.005348f, 0.0005f);
+        screen.transform.localScale = new Vector3(0.063f, 0.0287f, 1);
         screen.GetComponent<Collider>().enabled = false;
-        display = Label("Frequency display", "RADIO OFF", new Vector3(0, 0.014f, -0.011f), new Vector2(0.16f, 0.04f), 0.065f);
-        volumeKnob = Control("Volume - grab and twist", new Vector3(-0.119f, 0, -0.018f), true, ExcavatorRadioControl.Action.Volume);
-        tuningKnob = Control("Station - grab and twist", new Vector3(0.119f, 0, -0.018f), true, ExcavatorRadioControl.Action.Tune);
-        Control("Radio power", new Vector3(-0.047f, -0.027f, -0.014f), false, ExcavatorRadioControl.Action.Power);
-        Control("Previous station", new Vector3(0, -0.027f, -0.014f), false, ExcavatorRadioControl.Action.Previous);
-        Control("Next station", new Vector3(0.047f, -0.027f, -0.014f), false, ExcavatorRadioControl.Action.Next);
-        Label("Button labels", "PWR       <          >", new Vector3(0, -0.027f, -0.022f), new Vector2(0.14f, 0.018f), 0.045f);
-        Label("Volume label", "VOL", new Vector3(-0.119f, -0.032f, -0.012f), new Vector2(0.05f, 0.015f), 0.04f);
-        Label("Tuner label", "TUNE", new Vector3(0.119f, -0.032f, -0.012f), new Vector2(0.05f, 0.015f), 0.04f);
+        Destroy(screen.GetComponent<Collider>());
+        screen.GetComponent<Renderer>().sharedMaterial = screenMaterial;
+        display = Label("Original radio frequency", "RADIO\nOFF", new Vector3(0.0332f, 0.005348f, 0.0003f),
+            new Vector2(0.061f, 0.027f), 0.09f);
     }
 }
