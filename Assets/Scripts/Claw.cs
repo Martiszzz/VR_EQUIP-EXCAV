@@ -15,6 +15,9 @@ public class Claw : MonoBehaviour
         [HideInInspector] public Rigidbody touching; // kas sustabdė šį nagą
         [HideInInspector] public bool blocked;
         [System.NonSerialized] public GroundedAttachment terrainContact;
+        [System.NonSerialized] public bool groundBlocked;
+        [System.NonSerialized] public Collider touchingCollider,contactCollider;
+        [System.NonSerialized] public Vector3 contactNormal;
     }
 
     public LeverBase lever;
@@ -28,6 +31,10 @@ public class Claw : MonoBehaviour
     public Transform grip;
     [Min(0.02f)] public float gripRadius = 0.25f;
     public LayerMask grabMask = ~0;
+    [Min(.02f)] public float gripConfirmTime=.08f;
+    [Min(.001f)] public float gripContactSkin=.006f;
+    Rigidbody pendingGrip;
+    float pendingGripTime;
 
     [Header("Judėjimas")]
     [Min(0.05f)] public float closeSpeed = 0.8f;
@@ -87,6 +94,7 @@ public class Claw : MonoBehaviour
         float delta = v * closeSpeed * t * dt;
 
         if (held && delta < 0f) Release();
+        if(delta<=0){pendingGrip=null;pendingGripTime=0;}
         if (held) delta = 0f;                         // laikant rąstą toliau nespaudžiama
 
         if (Mathf.Abs(delta) > 0.000001f)
@@ -116,6 +124,7 @@ public class Claw : MonoBehaviour
             if(j.terrainContact)before=Mathf.Max(0,before-j.terrainContact.softSoilDepth);
             j.amount = Mathf.Clamp01(j.amount + d);
             j.blocked = false;
+            j.groundBlocked=false;j.touchingCollider=j.contactCollider=null;
             j.touching = null;
             ApplyPose(j);
             if(j.terrainContact && j.terrainContact.canScrapeSoil && DigSystem.I)
@@ -124,7 +133,7 @@ public class Claw : MonoBehaviour
             if(j.terrainContact)after=Mathf.Max(0,after-j.terrainContact.softSoilDepth);
             // Both opening and closing must respect fresh heightmap heights; allow escape from an existing overlap.
             if(after>penetrationTolerance && after>before+0.0001f)
-            {j.amount=previous[i];ApplyPose(j);j.blocked=true;}
+            {j.amount=previous[i];ApplyPose(j);j.blocked=true;j.groundBlocked=true;}
         }
         if (d <= 0f) return;
 
@@ -137,7 +146,7 @@ public class Claw : MonoBehaviour
         for (int i = 0; i < jaws.Length; i++)
         {
             var j = jaws[i];
-            if (!j.part) continue;
+            if (!j.part || j.groundBlocked) continue;
             if (Scan(j, out var rb))
             {
                 j.amount = previous[i];
@@ -148,7 +157,7 @@ public class Claw : MonoBehaviour
         }
         Physics.SyncTransforms();
 
-        if (!held) TryGrab();
+        if (!held) TryGrab(stepTime);
     }
 
     static void ApplyPose(Jaw j)
@@ -216,10 +225,11 @@ public class Claw : MonoBehaviour
                 var b = buffer[i];
                 if (IsIgnored(b, a)) continue;
                 if (Physics.ComputePenetration(a, a.transform.position, a.transform.rotation,
-                    b, b.transform.position, b.transform.rotation, out _, out float depth)
+                    b, b.transform.position, b.transform.rotation, out var direction, out float depth)
                     && depth > penetrationTolerance)
                 {
                     rb = b.attachedRigidbody;
+                    jaw.contactNormal=-direction;jaw.touchingCollider=b;jaw.contactCollider=a;
                     return true;
                 }
             }
@@ -227,15 +237,18 @@ public class Claw : MonoBehaviour
         return false;
     }
 
-    void TryGrab()
+    void TryGrab(float dt)
     {
+        var previousCandidate=pendingGrip;float previousTime=pendingGripTime;
+        pendingGrip=null;pendingGripTime=0;
         if (!grip) return;
         Rigidbody candidate = null;
-        int used = 0;
+        int used = 0,contacts=0;Vector3 firstNormal=Vector3.zero;bool opposed=false;
         foreach (var j in jaws)
         {
             if (!j.part) continue;
             used++;
+            if(j.groundBlocked)return;
             if (!j.blocked || !j.touching || j.touching.isKinematic)
             {
                 if (requireAllJaws) return;
@@ -247,9 +260,18 @@ public class Claw : MonoBehaviour
                 continue;
             }
             candidate = j.touching;
+            if(!j.touchingCollider || !j.contactCollider)return;
+            var onObject=j.touchingCollider.ClosestPoint(j.contactCollider.bounds.center);
+            if(Vector3.Distance(onObject,j.contactCollider.ClosestPoint(onObject))>gripContactSkin)return;
+            if(contacts==0)firstNormal=j.contactNormal;
+            else if(Vector3.Dot(firstNormal,j.contactNormal)<-.2f)opposed=true;
+            contacts++;
         }
-        if (!candidate || (requireAllJaws && used < 2)) return;
+        // A single jaw touching a log while the other is stopped by soil is not a grip.
+        if (!candidate || contacts<2 || !opposed || (requireAllJaws && contacts<used)) return;
         if (((1 << candidate.gameObject.layer) & grabMask) == 0) return;
+        pendingGrip=candidate;pendingGripTime=previousCandidate==candidate?previousTime+dt:dt;
+        if(pendingGripTime<gripConfirmTime)return;
 
         // atstumas iki artimiausio rąsto taško (ilgas rąstas turi centrą toli nuo Grip)
         float best = float.MaxValue;
@@ -261,6 +283,7 @@ public class Claw : MonoBehaviour
         if (best > gripRadius) return;
 
         held = candidate;
+        pendingGrip=null;pendingGripTime=0;
         heldWasKinematic = candidate.isKinematic;
         candidate.linearVelocity = Vector3.zero;
         candidate.angularVelocity = Vector3.zero;

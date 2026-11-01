@@ -48,6 +48,7 @@ public class ExcavatorBody : MonoBehaviour
         float nextRefresh = -1f;
         bool workingSoil;
         Vector3 groundContact;
+        Transform groundContactFrame;
         struct MovableContact { public Rigidbody body;public Vector3 direction,point;public float depth; }
         readonly List<MovableContact> movable=new List<MovableContact>();
         public void ResolveDynamicContacts(float dt)
@@ -147,7 +148,7 @@ public class ExcavatorBody : MonoBehaviour
             // Native suspension consumes this pressure next physics tick. It does not propose a new
             // root pose, so querying/rolling back every chassis collider here was both costly and wrong.
             if(grounding.UsesPhysicalSupport)
-            {grounding.TryHydraulicReaction(contact,depth,dt,effort);return false;}
+            {grounding.TryHydraulicReaction(contact,depth,dt,effort,groundContactFrame);return false;}
             Vector3 position=grounding.chassis.position;Quaternion rotation=grounding.chassis.rotation;
             var full=body.chassisProbe ?? (body.chassisProbe=body.CreateProbe(grounding.chassis));float before=full.Depth(true);
             bool reacted=grounding.TryHydraulicReaction(contact,depth,dt,effort);
@@ -163,12 +164,13 @@ public class ExcavatorBody : MonoBehaviour
             part.GetComponentsInChildren<BucketInside>(false, buckets);
             float depth = 0;
             groundContact=part.position;
+            groundContactFrame=part;
             foreach(var bucket in buckets)
-            {float d=bucket.GroundPenetration(DigSystem.I,workingSoil,out var contact);if(d>depth){depth=d;groundContact=contact;}}
+            {float d=bucket.GroundPenetration(DigSystem.I,workingSoil,out var contact);if(d>depth){depth=d;groundContact=contact;groundContactFrame=bucket.transform;}}
             part.GetComponentsInChildren<GroundedAttachment>(false, grounded);
             var terrain = DigSystem.I ? DigSystem.I.terrain : Terrain.activeTerrain;
             foreach(var attachment in grounded)
-            {if(attachment.CoveredByParent)continue;float d=attachment.Depth(terrain,out var contact);if(workingSoil && attachment.canScrapeSoil)d=Mathf.Max(0,d-attachment.softSoilDepth);if(d>depth){depth=d;groundContact=contact;}}
+            {if(attachment.CoveredByParent)continue;float d=attachment.Depth(terrain,out var contact);if(workingSoil && attachment.canScrapeSoil)d=Mathf.Max(0,d-attachment.softSoilDepth);if(d>depth){depth=d;groundContact=contact;groundContactFrame=attachment.transform;}}
             return depth;
         }
 

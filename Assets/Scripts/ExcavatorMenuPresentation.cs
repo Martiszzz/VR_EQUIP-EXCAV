@@ -109,7 +109,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         Card(excavation,false,44,"01","EXCAVATION YARD","Dig, move soil and shape the terrain.","BUCKET");
         Card(precision,true,560,"02","PRECISION WORK","Rotate, grab and position objects.","GRAPPLE");
         Rule(Root,44,594,1012);
-        HelpButton=SmallButton("Controls",Root,"Controls guide",44,617,258,49);HelpButton.onClick.AddListener(()=>ShowHelp(true));
+        HelpButton=SmallButton("Controls",Root,"Controls guide",44,617,258,49);HelpButton.onClick.AddListener(()=>ShowHelp(!HelpVisible));
         Text("Pointer hint",Root,"Point your controller and press the trigger",324,623,530,38,17,Muted);
         QuitButton=SmallButton("Quit",Root,"Exit",916,617,140,49);if(controller)QuitButton.onClick.AddListener(controller.Quit);
         status=Text("Footer status",Root,"CHOOSE A LEVEL TO BEGIN",44,683,1012,20,12,new Color(.38f,.49f,.53f));
@@ -137,7 +137,7 @@ public class ExcavatorMenuPresentation : MonoBehaviour
         helpRoot.gameObject.SetActive(false);loadingRoot.gameObject.SetActive(false);
         excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=true;
         foreach(var feedback in Root.GetComponentsInChildren<MenuButtonFeedback>(true)){feedback.presentation=this;feedback.Initialize();}
-        HelpButton.onClick.AddListener(()=>ShowHelp(true));CloseHelpButton.onClick.AddListener(()=>ShowHelp(false));if(controller)QuitButton.onClick.AddListener(controller.Quit);
+        HelpButton.onClick.AddListener(()=>ShowHelp(!HelpVisible));CloseHelpButton.onClick.AddListener(()=>ShowHelp(false));if(controller)QuitButton.onClick.AddListener(controller.Quit);
         foreach(var button in new[]{excavation,precision,HelpButton,CloseHelpButton,QuitButton})button.onClick.AddListener(()=>PlayFeedback(true));
         sound=GetComponent<AudioSource>();if(!sound)sound=gameObject.AddComponent<AudioSource>();sound.playOnAwake=false;sound.spatialBlend=0;sound.volume=.12f;
         hoverClip=Tone("Menu focus",520,.045f);clickClip=Tone("Menu select",740,.07f);
@@ -192,13 +192,30 @@ public class ExcavatorMenuPresentation : MonoBehaviour
     }
     public void ShowHelp(bool show)
     {
-        if(!IsBuilt || loading)return;helpRoot.gameObject.SetActive(show);
-        excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=!show;
+        if(!IsBuilt || loading)return;
+        helpRoot.gameObject.SetActive(show);
+        excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=true;
+        if(show)
+        {
+            // The yard title is created after the overlay. Draw the opaque guide last, and put it
+            // in front of the physical console so its Close button is not behind a 3D collider.
+            helpRoot.SetAsLastSibling();
+            var backdrop=helpRoot.Find("Controls backdrop");
+            if(backdrop && backdrop.TryGetComponent<MenuPanelGraphic>(out var panel)){panel.color=Ink;panel.raycastTarget=true;}
+            var camera=canvas.worldCamera?canvas.worldCamera:Camera.main;
+            if(Yard && camera)
+            {
+                var forward=Vector3.ProjectOnPlane(camera.transform.forward,Vector3.up).normalized;
+                if(forward.sqrMagnitude<.5f)forward=Vector3.forward;
+                helpRoot.position=camera.transform.position+forward*1.15f-Vector3.up*.05f;
+                helpRoot.rotation=Quaternion.LookRotation(forward,Vector3.up);
+            }
+        }
         if(EventSystem.current)EventSystem.current.SetSelectedGameObject(show?CloseHelpButton.gameObject:HelpButton.gameObject);
     }
     public void ShowLoading(string scene)
     {
-        if(!IsBuilt)return;loading=true;Group.interactable=false;helpRoot.gameObject.SetActive(false);loadingRoot.gameObject.SetActive(true);
+        if(!IsBuilt)return;loading=true;Group.interactable=false;helpRoot.gameObject.SetActive(false);loadingRoot.SetAsLastSibling();loadingRoot.gameObject.SetActive(true);
         excavation.interactable=precision.interactable=HelpButton.interactable=QuitButton.interactable=false;
         if(EventSystem.current)EventSystem.current.SetSelectedGameObject(null);
         SetProgress(0);

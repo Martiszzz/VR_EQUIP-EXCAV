@@ -46,7 +46,8 @@ public partial class DigSystem
         var cell=terrain.terrainData.heightmapScale;float radius=new Vector2(cell.x,cell.z).magnitude*1.1f;
         var destination=point+right*Mathf.Sign(side)*(radius+looseSoilEdgeGap);
         var material=SoilAt(point);float cut=Mathf.Min(depth,.01f,motion.magnitude*.8f/Mathf.Max(.5f,material.resistance));
-        return MoveSoilLocally(point,radius,cut,float.PositiveInfinity,point.y,destination);
+        float budget=horizontal.magnitude*radius*2*Mathf.Min(depth,maxDepth)*.3f;
+        return MoveSoilLocally(point,radius,cut,budget,point.y,destination);
     }
     public float ScrapeAttachmentSoil(GroundedAttachment tool,Vector3 motion)
     {

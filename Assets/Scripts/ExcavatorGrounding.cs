@@ -265,9 +265,9 @@ public partial class ExcavatorGrounding : MonoBehaviour
     {
         if(dt>0)HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(volume/dt/0.012f));
     }
-    public bool TryHydraulicReaction(Vector3 tool,float depth,float dt,float effort=1)
+    public bool TryHydraulicReaction(Vector3 tool,float depth,float dt,float effort=1,Transform contactFrame=null)
     {
-        if(UsesPhysicalSupport){RequestToolForce(tool,depth,effort);return false;}
+        if(UsesPhysicalSupport){RequestToolForce(tool,depth,effort,contactFrame);return false;}
         if(!Ready || !Ignition.EngineRunning || depth<=0 || depth>0.08f || dt<=0)return false;
         Gather(chassis.position,chassis.rotation);
         var direction=Vector3.ProjectOnPlane(tool-Pivot,Vector3.up).normalized;

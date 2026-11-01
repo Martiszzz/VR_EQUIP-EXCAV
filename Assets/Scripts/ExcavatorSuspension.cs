@@ -7,23 +7,28 @@ public partial class ExcavatorGrounding
     [Min(.005f)] public float suspensionCompression=.018f;
     [Range(.3f,2)] public float suspensionDamping=1;
     [Min(.01f)] public float contactReach=.06f;
-    [Min(.1f)] public float supportForceMargin=1.2f;
+    [HideInInspector] public float supportForceMargin=1.2f; // Legacy serialized tuning.
     [Min(.01f)] public float toolCompliance=.025f;
     [Min(.04f)] public float supportForceSmoothing=.15f;
-    [Range(0,.2f)] public float liftForceSurplus=.06f;
+    [HideInInspector] public float liftForceSurplus=.06f;
     [Min(.001f)] public float terrainContactSkin=.005f;
-    float smoothedToolForce,toolForceVelocity;
+    [Min(.01f)] public float plantedToolSpeed=.08f;
+    [Min(.005f)] public float supportReleaseGap=.02f;
+    float toolSupportLoad;
+    Transform plantedFrame;
+    Vector3 plantedLocalPoint;
+    float plantedAllowance;
     public int GroundedTrackPoints {get;private set;}
     public Rigidbody PhysicalBody {get;private set;}
     public bool UsesPhysicalSupport => physicalSuspension && PhysicalBody && !PhysicalBody.isKinematic;
     GroundedAttachment[] physicalTools;
     BucketInside physicalBucket;
-    Vector3 requestedPoint;
     float requestedEffort,requestRemaining;
 
     public void EnablePhysicalSupport(Rigidbody body)
     {
         PhysicalBody=body;
+        plantedFrame=null;toolSupportLoad=0;requestRemaining=0;
         physicalTools=GetComponentsInChildren<GroundedAttachment>(true);
         physicalBucket=GetComponentInChildren<BucketInside>(true);
         body.isKinematic=false;body.useGravity=true;
@@ -78,23 +83,29 @@ public partial class ExcavatorGrounding
             force=Mathf.Clamp(force,0,mass*gravity*2.5f/12);
             body.AddForceAtPosition(Vector3.up*force,feet[i],ForceMode.Force);
         }
-        float deepest=0;Vector3 point=Vector3.zero;
+        float deepest=0,allowance=0;Vector3 point=Vector3.zero;Transform contactFrame=null;
         foreach(var tool in physicalTools)
         {
             if(!tool || !tool.isActiveAndEnabled || tool.CoveredByParent)continue;
             float depth=tool.Depth(terrain,out var p);
             depth=Mathf.Max(0,depth-tool.softSoilDepth);
-            if(depth>deepest){deepest=depth;point=p;}
+            if(depth>deepest){deepest=depth;point=p;contactFrame=tool.transform;allowance=tool.softSoilDepth;}
         }
         if(physicalBucket && DigSystem.I)
         {
             float depth=physicalBucket.GroundPenetration(DigSystem.I,false,out var p);
-            if(depth>deepest){deepest=depth;point=p;}
+            if(depth>deepest){deepest=depth;point=p;contactFrame=physicalBucket.transform;allowance=0;}
         }
-        if(deepest>0)ApplyToolForce(point,deepest,dt);
-        else if(requestRemaining>0 && requestedEffort>0)
-            ApplyToolForce(requestedPoint,.003f,dt);
-        else {smoothedToolForce=0;toolForceVelocity=0;}
+        if(contactFrame)
+        {plantedFrame=contactFrame;plantedLocalPoint=contactFrame.InverseTransformPoint(point);plantedAllowance=allowance;}
+        bool supporting=deepest>0;
+        if(!supporting && plantedFrame && plantedFrame.gameObject.activeInHierarchy)
+        {
+            point=plantedFrame.TransformPoint(plantedLocalPoint);
+            if(Ground(point,out float y)){deepest=y-point.y-plantedAllowance;supporting=deepest>=-supportReleaseGap;}
+        }
+        if(supporting)ApplyToolForce(point,deepest,dt);
+        else {toolSupportLoad=0;plantedFrame=null;}
         requestRemaining=Mathf.Max(0,requestRemaining-dt);
         var velocity=body.linearVelocity;velocity.y=Mathf.Clamp(velocity.y,-maxFallSpeed,Mathf.Min(maxRiseSpeed,.35f));body.linearVelocity=velocity;
         float tilt=Vector3.Angle(chassis.up,SupportNormal);
@@ -115,22 +126,24 @@ public partial class ExcavatorGrounding
             float gap=feet[i].y-surface[i].y;minGap=Mathf.Min(minGap,gap);
             if(gap>contactReach)continue;
             float angularY=body.GetPointVelocity(feet[i]).y-body.linearVelocity.y;
-            minVelocity=Mathf.Max(minVelocity,(-terrainContactSkin-gap)/Mathf.Max(.001f,dt)-angularY+gravity*dt);
+            minVelocity=Mathf.Max(minVelocity,(-terrainContactSkin-gap)/Mathf.Max(.001f,dt)-angularY);
         }
         // A ray-supported chassis has no terrain collision impulse. Stop an incoming track at the
         // surface instead of waiting for capped suspension springs to recover a buried machine.
         var velocity=body.linearVelocity;velocity.y=Mathf.Max(velocity.y,Mathf.Min(.15f,minVelocity));body.linearVelocity=velocity;
-        if(minGap < -terrainContactSkin)
+        if(minGap < -Mathf.Max(.025f,terrainContactSkin))
         {
-            body.position+=Vector3.up*Mathf.Min(.015f,-terrainContactSkin-minGap);
+            body.position+=Vector3.up*Mathf.Min(.005f,-terrainContactSkin-minGap);
             body.angularVelocity*=Mathf.Exp(-20*dt);
             Gather(chassis.position,chassis.rotation);
         }
     }
-    void RequestToolForce(Vector3 point,float depth,float effort)
+    void RequestToolForce(Vector3 point,float depth,float effort,Transform frame)
     {
         if(!Ignition.EngineRunning || depth<=0 || depth>.1f || effort<=0)return;
-        requestedPoint=point;requestedEffort=Mathf.Clamp01(effort);requestRemaining=.04f;
+        plantedFrame=frame?frame:chassis;plantedLocalPoint=plantedFrame.InverseTransformPoint(point);
+        var contact=plantedFrame.GetComponent<GroundedAttachment>();plantedAllowance=contact?contact.softSoilDepth:0;
+        requestedEffort=Mathf.Clamp01(effort);requestRemaining=.04f;
     }
     void ApplyToolForce(Vector3 point,float depth,float dt)
     {
@@ -146,17 +159,17 @@ public partial class ExcavatorGrounding
         float arm=Vector3.Dot(point-rear,direction);if(arm<.25f)return;
         float weight=PhysicalBody.mass*gravity;
         RequiredLiftForce=weight*Mathf.Max(.05f,Vector3.Dot(PhysicalBody.worldCenterOfMass-rear,direction))/arm;
-        float pressure=depth/Mathf.Max(.005f,toolCompliance);
-        if(requestRemaining>0)pressure=Mathf.Max(pressure,requestedEffort);
-        float cap=Mathf.Min(maximumHydraulicForce,RequiredLiftForce*Mathf.Min(supportForceMargin,1+liftForceSurplus));
+        float command=requestRemaining>0?requestedEffort:0;
+        toolSupportLoad=Mathf.Max(Mathf.Max(toolSupportLoad,Mathf.Clamp01(depth/Mathf.Max(.005f,toolCompliance*.4f))),command);
+        float cap=maximumHydraulicForce;
         var torque=Quaternion.Inverse(PhysicalBody.rotation)*Vector3.Cross(point-PhysicalBody.worldCenterOfMass,Vector3.up);
         var inertia=PhysicalBody.inertiaTensor;
         float effectiveMass=1/(1/PhysicalBody.mass+torque.x*torque.x/Mathf.Max(1,inertia.x)+torque.y*torque.y/Mathf.Max(1,inertia.y)+torque.z*torque.z/Mathf.Max(1,inertia.z));
-        float damping=2*Mathf.Sqrt(Mathf.Max(1,RequiredLiftForce/Mathf.Max(.005f,toolCompliance))*effectiveMass)*1.2f;
-        float target=Mathf.Clamp(Mathf.Min(maximumHydraulicForce*Mathf.Clamp01(pressure),cap)-PhysicalBody.GetPointVelocity(point).y*damping,0,cap);
-        float force=Mathf.Clamp(Mathf.SmoothDamp(smoothedToolForce,target,ref toolForceVelocity,supportForceSmoothing,float.PositiveInfinity,dt),0,cap);
+        // Do not low-pass the velocity feedback: its delay made the blade/track supports drive
+        // each other into an oscillation. Keep contact across a small unloading gap instead.
+        float desiredSpeed=Mathf.Clamp(depth/Mathf.Max(.06f,supportForceSmoothing)+command*plantedToolSpeed,-plantedToolSpeed,plantedToolSpeed);
+        float force=Mathf.Clamp(toolSupportLoad*RequiredLiftForce+effectiveMass*(desiredSpeed-PhysicalBody.GetPointVelocity(point).y)/Mathf.Max(.001f,dt*1.5f),0,cap);
         if(Vector3.Angle(chassis.up,SupportNormal)>=maxHydraulicTilt && force>RequiredLiftForce)force=RequiredLiftForce;
-        smoothedToolForce=force;
         AppliedLiftForce=force;HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(force/maximumHydraulicForce));
         // Actual Newtons at the planted tool, balanced by independent track spring forces and gravity.
         PhysicalBody.AddForceAtPosition(Vector3.up*force,point,ForceMode.Force);

@@ -36,7 +36,7 @@ public class GroundedAttachment : MonoBehaviour
         contact=transform.position;
         if (!terrain) return 0;
         var contacts=Contacts;
-        float depth = 0;int contactCount=0;
+        float depth = 0,contactCount=0;
         foreach (var c in contacts)
         {
             if (!c || !c.enabled || c.isTrigger) continue;
@@ -58,12 +58,19 @@ public class GroundedAttachment : MonoBehaviour
         }
         return depth;
     }
-    static void Consider(Terrain terrain,Vector3 point,ref float depth,ref Vector3 contact,ref int count)
+    static void Consider(Terrain terrain,Vector3 point,ref float depth,ref Vector3 contact,ref float count)
     {
         float candidate=Sample(terrain,point);
-        if(candidate>depth+.0001f){depth=candidate;contact=point;count=1;}
-        else if(candidate>0 && Mathf.Abs(candidate-depth)<=.0001f)
-        {depth=Mathf.Max(depth,candidate);contact+=(point-contact)/++count;}
+        // A broad blade rests on a contact patch. Choosing a different single corner for tiny
+        // height differences made its lifting torque alternate left/right every physics tick.
+        if(candidate>depth+.01f){depth=candidate;contact=point;count=1;}
+        else if(candidate>0 && Mathf.Abs(candidate-depth)<=.01f)
+        {
+            if(candidate>depth)count*=Mathf.Clamp01(1-(candidate-depth)/.01f);
+            depth=Mathf.Max(depth,candidate);
+            float weight=Mathf.Clamp01(1-(depth-candidate)/.01f);
+            if(weight>0){count+=weight;contact+=(point-contact)*(weight/count);}
+        }
     }
     static float Sample(Terrain terrain, Vector3 p)
     {

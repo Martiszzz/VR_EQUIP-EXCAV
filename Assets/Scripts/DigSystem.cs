@@ -141,7 +141,9 @@ public partial class DigSystem : MonoBehaviour
             cuts[z, x] = Mathf.Max(0, heights[z, x] - floor);
             total += cuts[z, x];
         }
-        float displaced = total * td.size.y * CellArea;
+        float available = total * td.size.y * CellArea;
+        // Move only the thin strip swept by this stroke, not the whole expanded overlap box each tick.
+        float displaced=Mathf.Min(available,horizontal.magnitude*Mathf.Max(.03f,width)*Mathf.Min(maxDepth,bounds.size.y)*(blade?1f:.7f));
         if (displaced <= 0) return 0;
         // Deposit first and remove only what the destination accepts, preserving volume at terrain limits.
         float deposited;
@@ -150,7 +152,7 @@ public partial class DigSystem : MonoBehaviour
             // A growing windrow escapes around the two ends of the blade instead of teleporting far ahead.
             var side=Vector3.Cross(Vector3.up,direction);
             float pile=Mathf.Max(0,SurfaceY(bounds.center)-bounds.min.y);
-            float sideFraction=Mathf.Clamp(0.2f+pile*2,0.2f,0.6f);
+            float sideFraction=Mathf.Clamp(.05f+pile*.3f,.05f,.2f);
             float sideRadius=Mathf.Max(width*0.22f,Mathf.Max(cell.x,cell.z)*1.5f);
             var edge=bounds.center+direction*(forwardExtent+sideRadius+looseSoilEdgeGap);
             deposited=Add(edge+side*(width*0.5f+looseSoilEdgeGap),sideRadius,displaced*sideFraction*0.5f,true);
@@ -166,7 +168,7 @@ public partial class DigSystem : MonoBehaviour
             deposited+=Add(destination,radius,displaced-deposited,true);
         }
         if (deposited <= 0) return 0;
-        float ratio = Mathf.Clamp01(deposited / displaced);
+        float ratio = Mathf.Clamp01(deposited / available);
         for (int z = 0; z < heights.GetLength(0); z++)
         for (int x = 0; x < heights.GetLength(1); x++) heights[z, x] -= cuts[z, x] * ratio;
         patch.Apply();

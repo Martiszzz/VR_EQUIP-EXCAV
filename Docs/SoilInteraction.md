@@ -67,3 +67,14 @@ Galutinė kasimo regresija pasiekė 2,032 m gylį per tikrus ribotų Level 1 są
 - Kritimo greitis prie atramos ribojamas pagal numatomą vikšro kontaktą. Jei vikšras vis dėlto persidengė su reljefu, leidžiama tik maža atkuriamoji korekcija, o ne laukimas, kol suspaustos spyruoklės išmes užkastą mašiną. `terrainContactSkin=0.005` m.
 
 Sustabdyti Play ir paleisti sceną iš naujo, tada rankiniu būdu pabandyti peilio kėlimą, jo laikymą nuleistoje padėtyje ir žemių stūmimą arti vikšrų.
+
+## Peilio kontaktas, tikras griebimas ir meniu
+
+Papildymas peržiūrėtas pagal kodą, be Unity paleidimo ir automatinių bandymų, kaip paprašė naudotojas.
+
+- Peilio atrama išlaiko įrankio vietinį kontakto tašką ir trumpą 2 cm atleidimo zoną. Vėluojantis jėgos filtras pakeistas tiesioginiu kontakto greičio reguliavimu ir svorio momento kompensavimu. Jėga gali naudoti visą `maximumHydraulicForce`; ankstesni `supportForceMargin` ir `liftForceSurplus` palikti tik serializavimo suderinamumui. `plantedToolSpeed=0.08` m/s, `supportForceSmoothing` dabar nustato kontakto padėties koregavimo laiką. Peilio atramos taškas sveriamas per kontakto plotą, kad mažas posvyris nekeistų visos jėgos iš vieno kampo į kitą. Pašalinta papildoma gravitacijos greičio atsarga, o avarinė persidengimo korekcija sumažinta.
+- Stumiamas grunto tūris ribojamas tikru per žingsnį nušluotu sluoksniu, o ne visu išplėstu įrankio tūriu. Peilio šonams tenka 5–20 % vietoj 20–60 %, o kaušo šoninių kraštų gramdymui taikomas atskiras mažas judesio tūrio biudžetas. Gruntas nepanaikinamas: neperkeltas sluoksnis lieka vietoje.
+- Rąstas neprijungiamas prie griebtuvo pagal vienos žnyplės kliūtį. Būtini bent du to paties objekto kontaktai priešingomis kryptimis, išlaikytas kontaktas tikroje atšaukto judesio pozoje (6 mm tolerancija) ir 0,08 s patvirtinimas. Į žemę užblokuota žnyplė neleidžia patvirtinti griebimo. `gripContactSkin` ir `gripConfirmTime` derinami Inspector.
+- Controls mygtukas atidaro ir uždaro gidą. Kiti meniu pasirinkimai nebeužrakinami; gidas su nepermatomu fonu piešiamas paskutinis ir 3D meniu padedamas prieš konsolę, kad neužstotų Close mygtuko bei nepersidengtų su TRAINING YARD užrašu.
+
+Po atnaujinimo Play sustabdyti ir sceną paleisti iš naujo. Šio papildymo veikimą žaidime dar turi patvirtinti naudotojas.
