@@ -1008,8 +1008,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 30d95c204f2e49a88ba1be23a605c7f5, type: 2}
   - {fileID: 11400000, guid: 74db596fdde84f69abf40fd853f84afb, type: 2}
   depthLayers: 1
-  clayDepth: 0.25
-  compactedDepth: 0.7
+  clayDepth: 1.5
+  compactedDepth: 3.5
   simulateSlopes: 1
   makeTrackRuts: 1
   soilTilesPerStep: 2
@@ -3856,7 +3856,7 @@ MonoBehaviour:
   speed: 22
   limit: 1
   minAngle: -20
-  maxAngle: 30
+  maxAngle: 60
   deadzone: 0.12
   acceleration: 45
   braking: 80
@@ -4111,7 +4111,7 @@ MonoBehaviour:
   leftTrack: {fileID: 346980961889796245}
   rightTrack: {fileID: 1292206066633544386}
   terrain: {fileID: 302056367}
-  maxDriveSlope: 32
+  maxDriveSlope: 35
   maxBodyTilt: 40
   tiltSpeed: 18
   groundClearance: 0.012
@@ -8704,9 +8704,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SoilWorkFeedback
   dustShader: {fileID: 4800000, guid: 0406db5a14f94604a8c57ccfbc9f3b46, type: 3}
   soil: {fileID: 568196565}
-  gaugeFont: {fileID: 11400000, guid: 29a2eb14b56cf8e45bb899b95514a316, type: 2}
-  showBucketGauge: 1
-  gaugeOffsetMetres: {x: 0.3, y: 1.05, z: 0.1}
   soundVolume: 0.3
   dustBudget: 128
   effectDistance: 20

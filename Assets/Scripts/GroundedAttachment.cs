@@ -5,6 +5,10 @@ public class GroundedAttachment : MonoBehaviour
 {
     public bool includeChildren = true;
     public bool canPushSoil = true;
+    public bool canScrapeSoil;
+    [Range(0,.1f)] public float softSoilDepth;
+    [System.NonSerialized] public GroundedAttachment aggregateParent;
+    public bool CoveredByParent => aggregateParent && aggregateParent.isActiveAndEnabled && aggregateParent.includeChildren;
     Collider[] contacts;
     Collider[] Contacts => contacts ?? (contacts = includeChildren ? GetComponentsInChildren<Collider>() : GetComponents<Collider>());
     public Bounds WorkBounds

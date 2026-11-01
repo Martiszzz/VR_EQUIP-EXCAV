@@ -6,6 +6,9 @@ public partial class DigSystem
 {
     // Unity's GetHeights allocates. Keep one authoritative grid and reuse exact-size edit windows after warmup.
     float[,] soilHeights;
+    byte[] modifiedCells;
+    public uint TerrainRevision {get;private set;}
+    public uint SyncedTerrainRevision {get;private set;}
     TerrainData cachedHeightData;
     bool heightsValid, writingHeights, observingHeights;
     readonly List<SoilPatch> patches=new List<SoilPatch>();
@@ -31,6 +34,7 @@ public partial class DigSystem
     {
         ObserveHeights();
         var data=terrain.terrainData;
+        if(cachedHeightData!=data)modifiedCells=new byte[data.heightmapResolution*data.heightmapResolution];
         if(cachedHeightData!=data || !heightsValid)
         {soilHeights=data.GetHeights(0,0,data.heightmapResolution,data.heightmapResolution);cachedHeightData=data;heightsValid=true;}
     }
@@ -59,8 +63,17 @@ public partial class DigSystem
         {
             // A blade may deposit through a nested window before removing its source strip.
             // Apply deltas to the live grid so overlapping windows cannot overwrite the new pile.
+            bool changed=false;
             for(int row=0;row<Height;row++)for(int col=0;col<Width;col++)
-                Heights[row,col]=owner.soilHeights[z+row,x+col]=Mathf.Clamp01(owner.soilHeights[z+row,x+col]+Heights[row,col]-Original[row,col]);
+            {
+                float delta=Heights[row,col]-Original[row,col];
+                if(Mathf.Abs(delta)>1e-8f)owner.modifiedCells[x+col+(z+row)*owner.cachedHeightData.heightmapResolution]=1;
+                float previous=owner.soilHeights[z+row,x+col],next=Mathf.Clamp01(previous+delta);
+                changed|=next!=previous;
+                Heights[row,col]=owner.soilHeights[z+row,x+col]=next;
+            }
+            if(!changed)return;
+            owner.TerrainRevision++;
             owner.writingHeights=true;
             try{owner.terrain.terrainData.SetHeightsDelayLOD(x,z,Heights);owner.terrainDirty=true;}
             finally{owner.writingHeights=false;}

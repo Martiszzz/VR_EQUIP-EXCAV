@@ -1,10 +1,13 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class ExcavatorBody : MonoBehaviour
 {
     public LayerMask obstacles = ~0;                 // su kokiais sluoksniais susiduriama
     [Min(0f)] public float tolerance = 0.01f;        // leidžiamas nežymus persidengimas (m)
+    [Min(.001f)] public float dynamicContactSkin=.018f;
+    [Min(.05f)] public float maxObjectPushSpeed=.35f;
+    [Min(10)] public float maxObjectPushForce=1200;
 
     public static ExcavatorBody For(Transform t)
     {
@@ -14,6 +17,9 @@ public class ExcavatorBody : MonoBehaviour
     }
 
     Probe chassisProbe;
+    CylinderLink[] links;
+    public void AlignLinkages()
+    {if(links==null)links=GetComponentsInChildren<CylinderLink>();foreach(var link in links)if(link)link.Align();}
     public Probe CreateProbe(Transform part) { return new Probe(this, part); }
 
     bool IsObstacle(Collider c)
@@ -42,11 +48,25 @@ public class ExcavatorBody : MonoBehaviour
         float nextRefresh = -1f;
         bool workingSoil;
         Vector3 groundContact;
+        struct MovableContact { public Rigidbody body;public Vector3 direction,point;public float depth; }
+        readonly List<MovableContact> movable=new List<MovableContact>();
+        public void ResolveDynamicContacts(float dt)
+        {
+            foreach(var hit in movable)
+            {
+                if(!hit.body || hit.body.isKinematic)continue;
+                float speed=Mathf.Min(body.maxObjectPushSpeed,hit.depth/Mathf.Max(.02f,dt));
+                float force=Mathf.Clamp(hit.body.mass*(speed-Vector3.Dot(hit.body.GetPointVelocity(hit.point),hit.direction))/.08f,0,body.maxObjectPushForce);
+                hit.body.maxDepenetrationVelocity=.35f;
+                hit.body.AddForceAtPosition(hit.direction*force*Mathf.Min(1,dt/Time.fixedDeltaTime),hit.point,ForceMode.Force);
+            }
+        }
 
         public float CuttingResistance {get;private set;}=1;
         public float Tolerance { get { return body.tolerance; } }
 
         public Probe(ExcavatorBody owner, Transform root) { body = owner; part = root; }
+        public void AlignLinkages(){body.AlignLinkages();}
         void RefreshColliders()
         {
             if(Time.time<nextRefresh)return;
@@ -66,7 +86,7 @@ public class ExcavatorBody : MonoBehaviour
             part.GetComponentsInChildren<DigTeeth>(false, teeth);
             part.GetComponentsInChildren<GroundedAttachment>(false,pushing);
             previousBlades.Clear();
-            foreach(var blade in pushing)previousBlades.Add(blade.transform.TransformPoint(blade.WorkBounds.center));
+            foreach(var blade in pushing)previousBlades.Add(blade.CoveredByParent?Vector3.zero:blade.transform.TransformPoint(blade.WorkBounds.center));
             previousRotations.Clear();previousMouthUp.Clear();
             previousTips.Clear();
             previousBodies.Clear();
@@ -97,8 +117,10 @@ public class ExcavatorBody : MonoBehaviour
             if(DigSystem.I && Ignition.EngineRunning)
                 for(int i=0;i<pushing.Count;i++)
                 {
+                    if(pushing[i].CoveredByParent)continue;
                     var point=pushing[i].transform.TransformPoint(pushing[i].WorkBounds.center);
-                    float volume=DigSystem.I.PushAttachmentSoil(pushing[i],point-previousBlades[i]);moved+=volume;
+                    float volume=pushing[i].canScrapeSoil?DigSystem.I.ScrapeAttachmentSoil(pushing[i],point-previousBlades[i]):DigSystem.I.PushAttachmentSoil(pushing[i],point-previousBlades[i]);moved+=volume;
+                    if(pushing[i].canScrapeSoil)CuttingResistance=Mathf.Max(CuttingResistance,DigSystem.I.LastToolResistance);
                     if(volume>0)
                     {
                         workPoint=new Vector3(point.x,DigSystem.I.SurfaceY(point),point.z);
@@ -122,6 +144,10 @@ public class ExcavatorBody : MonoBehaviour
             float depth=GroundDepth();
             if(depth<=Tolerance)return false;
             Vector3 contact=groundContact;
+            // Native suspension consumes this pressure next physics tick. It does not propose a new
+            // root pose, so querying/rolling back every chassis collider here was both costly and wrong.
+            if(grounding.UsesPhysicalSupport)
+            {grounding.TryHydraulicReaction(contact,depth,dt,effort);return false;}
             Vector3 position=grounding.chassis.position;Quaternion rotation=grounding.chassis.rotation;
             var full=body.chassisProbe ?? (body.chassisProbe=body.CreateProbe(grounding.chassis));float before=full.Depth(true);
             bool reacted=grounding.TryHydraulicReaction(contact,depth,dt,effort);
@@ -142,7 +168,7 @@ public class ExcavatorBody : MonoBehaviour
             part.GetComponentsInChildren<GroundedAttachment>(false, grounded);
             var terrain = DigSystem.I ? DigSystem.I.terrain : Terrain.activeTerrain;
             foreach(var attachment in grounded)
-            {float d=attachment.Depth(terrain,out var contact);if(d>depth){depth=d;groundContact=contact;}}
+            {if(attachment.CoveredByParent)continue;float d=attachment.Depth(terrain,out var contact);if(workingSoil && attachment.canScrapeSoil)d=Mathf.Max(0,d-attachment.softSoilDepth);if(d>depth){depth=d;groundContact=contact;}}
             return depth;
         }
 
@@ -151,6 +177,7 @@ public class ExcavatorBody : MonoBehaviour
         public float Depth(bool ignoreFloor)
         {
             RefreshColliders();
+            movable.Clear();
             float total = 0f;
             for (int k = 0; k < mine.Count; k++)
             {
@@ -168,6 +195,14 @@ public class ExcavatorBody : MonoBehaviour
                         b, b.transform.position, b.transform.rotation, out Vector3 dir, out float dist))
                     {
                         if (ignoreFloor && dir.y > 0.6f) continue;
+                        var rb=b.attachedRigidbody;
+                        if(rb && !rb.isKinematic)
+                        {
+                            int index=-1;for(int contactIndex=0;contactIndex<movable.Count;contactIndex++)if(movable[contactIndex].body==rb){index=contactIndex;break;}
+                            var entry=new MovableContact{body=rb,direction=-dir,point=b.ClosestPoint(a.bounds.center),depth=dist};
+                            if(index<0)movable.Add(entry);else if(movable[index].depth<dist)movable[index]=entry;
+                            dist=Mathf.Max(0,dist-body.dynamicContactSkin);
+                        }
                         total += dist;
                     }
                 }

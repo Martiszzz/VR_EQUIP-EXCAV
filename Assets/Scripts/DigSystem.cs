@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+[DefaultExecutionOrder(500)]
 public partial class DigSystem : MonoBehaviour
 {
     public static DigSystem I;
@@ -8,6 +9,13 @@ public partial class DigSystem : MonoBehaviour
     public DirtBlock blockPrefab;
     public BucketInside bucket;
     public SoilWorkFeedback feedback;
+    public ExcavatorGrounding workMachine;
+    [Min(2)] public float maximumWorkDistance=8;
+    public bool IsWorkPoint(Vector3 point)
+    {
+        if(!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z))return false;
+        return !workMachine || Vector3.ProjectOnPlane(point-workMachine.Pivot,Vector3.up).sqrMagnitude<=maximumWorkDistance*maximumWorkDistance;
+    }
     [Min(0.01f)] public float blockSize = 0.06f;
     [Min(1)] public int maxBlocks = 250;
     [Range(8,64)] public int maxLooseBodies = 32;
@@ -28,15 +36,17 @@ public partial class DigSystem : MonoBehaviour
     void FixedUpdate()
     {
         terrainSyncClock += Time.fixedDeltaTime;
-        if (terrainSyncClock >= 0.08f) { StepSoil(terrainSyncClock); FlushTerrainChanges(); terrainSyncClock = 0; }
+        if (terrainSyncClock >= .08f) {StepSoil(terrainSyncClock);terrainSyncClock=0;}
+        // One commit after all arm/track/jaw producers, before the native physics simulation.
+        FlushTerrainChanges(terrainSyncClock==0);
     }
-    public void FlushTerrainChanges()
+    public void FlushTerrainChanges(bool paint=true)
     {
         if (!terrain || !terrain.terrainData) return;
         if (terrainDirty)
-        {writingHeights=true;try{terrain.terrainData.SyncHeightmap();}finally{writingHeights=false;}}
+        {writingHeights=true;try{terrain.terrainData.SyncHeightmap();SyncedTerrainRevision=TerrainRevision;}finally{writingHeights=false;}}
         terrainDirty = false;
-        if (paintDirty || paintQueue.Count>0) { PaintChangedSurface(); paintDirty = false; }
+        if (paint && (paintDirty || paintQueue.Count>0)) { PaintChangedSurface(); paintDirty = false; }
     }
     public float BlockVolume => blockSize * blockSize * blockSize;
     void RememberSoilSurface()
@@ -85,6 +95,7 @@ public partial class DigSystem : MonoBehaviour
         for (int y = -1; y <= 1; y += 2)
         for (int z = -1; z <= 1; z += 2)
             bounds.Encapsulate(frame.MultiplyPoint3x4(work.center + Vector3.Scale(work.extents, new Vector3(x, y, z))));
+        if(!IsWorkPoint(bounds.min) || !IsWorkPoint(bounds.max))return 0;
         var direction = horizontal.normalized;
         float forwardExtent = Mathf.Abs(direction.x) * bounds.extents.x + Mathf.Abs(direction.z) * bounds.extents.z;
         float width = Mathf.Abs(direction.z) * bounds.size.x + Mathf.Abs(direction.x) * bounds.size.z;
@@ -117,7 +128,7 @@ public partial class DigSystem : MonoBehaviour
             float penetration = origin.y + heights[z, x] * td.size.y - bottom;
             float originalSurface = origin.y + pushBaseHeights[z0 + z, x0 + x] * td.size.y;
             // Deposited mounds remain pushable, while the underlying undisturbed soil stays protected.
-            if (penetration <= 0.003f || originalSurface - bottom > maxDepth ||
+            if (penetration <= 0.003f || (penetration>maxDepth && origin.y+heights[z,x]*td.size.y<=originalSurface+.003f) ||
                 penetration > bounds.size.y + maxDepth) continue;
             float floor = Mathf.Clamp01((bottom + 0.003f - origin.y) / td.size.y);
             cuts[z, x] = Mathf.Max(0, heights[z, x] - floor);
@@ -217,6 +228,7 @@ public partial class DigSystem : MonoBehaviour
             return;
         }
         I = this;
+        if(!workMachine)workMachine=FindAnyObjectByType<ExcavatorGrounding>();
         if(!simulationObserver && Camera.main)simulationObserver=Camera.main.transform;
         original = terrain.terrainData;
         runtimeData = Instantiate(original);
@@ -281,10 +293,11 @@ public partial class DigSystem : MonoBehaviour
             {
                 float u=(px+x+0.5f)/r,v=(pz+z+0.5f)/r;
                 float hx=u*(hr-1),hz=v*(hr-1);int ix=Mathf.Min(hr-2,(int)hx),iz=Mathf.Min(hr-2,(int)hz);
+                bool touched=modifiedCells!=null && (modifiedCells[ix+iz*hr]!=0 || modifiedCells[ix+1+iz*hr]!=0 || modifiedCells[ix+(iz+1)*hr]!=0 || modifiedCells[ix+1+(iz+1)*hr]!=0);
                 float original=TriangleHeight(pushBaseHeights,ix,iz,hx-ix,hz-iz)*td.size.y;
                 // Paint the rendered terrain's interpolation, not the contact grid's interpolation at a sharp rim.
                 float changed=Mathf.Abs(td.GetInterpolatedHeight(u,v)-original);
-                float dark=Mathf.SmoothStep(0,0.85f,Mathf.InverseLerp(0.003f,0.05f,changed));
+                float dark=touched?Mathf.SmoothStep(0,0.85f,Mathf.InverseLerp(0.003f,0.05f,changed)):0;
                 paintTile[z,x,1]=dark;paintTile[z,x,0]=1-dark;
             }
             td.SetAlphamaps(px,pz,paintTile);
@@ -303,7 +316,8 @@ public partial class DigSystem : MonoBehaviour
         out float cx, out float cz, out float rx, out float rz)
     {
         x0 = z0 = w = h = 0; cx = cz = rx = rz = 0;
-        if (radius <= 0 || !ContainsTerrainPoint(world)) return false;
+        if (radius <= 0 || !float.IsFinite(radius) || !IsWorkPoint(world) || !ContainsTerrainPoint(world)) return false;
+        if(workMachine && Vector3.ProjectOnPlane(world-workMachine.Pivot,Vector3.up).magnitude+radius>maximumWorkDistance)return false;
         var td = terrain.terrainData;
         int res = td.heightmapResolution;
         Vector3 local = world - terrain.transform.position;
@@ -327,7 +341,7 @@ public partial class DigSystem : MonoBehaviour
     public float Dig(Vector3 point, float radius, float depth, float maxVolume = float.PositiveInfinity,
         float floorY = float.NegativeInfinity)
     {
-        if (depth <= 0 || maxVolume <= 0 || !GetWindow(point, radius, out int x0, out int z0,
+        if (!IsWorkPoint(point) || depth <= 0 || maxVolume <= 0 || !GetWindow(point, radius, out int x0, out int z0,
             out int w, out int h, out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
         RememberSoilSurface();
@@ -361,7 +375,7 @@ public partial class DigSystem : MonoBehaviour
     // Return the accepted volume so a saturated terrain never silently deletes soil.
     public float Add(Vector3 point, float radius, float volume, bool deferUpdates = false, SoilKind? material = null)
     {
-        if (volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
+        if (!IsWorkPoint(point) || volume <= 0 || !GetWindow(point, radius, out int x0, out int z0, out int w, out int h,
             out float cx, out float cz, out float rx, out float rz)) return 0f;
         var td = terrain.terrainData;
         RememberSoilSurface();
@@ -413,7 +427,7 @@ public partial class DigSystem : MonoBehaviour
     public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0, SoilKind kind = SoilKind.Loam)
     {
         float amount = volume ?? BlockVolume;
-        if (!CanSpawn || amount <= 0 || float.IsNaN(amount) || float.IsInfinity(amount)) return null;
+        if (!IsWorkPoint(pos) || !CanSpawn || amount <= 0 || float.IsNaN(amount) || float.IsInfinity(amount)) return null;
         var block = pool.Count > 0 ? pool.Dequeue() : Instantiate(blockPrefab, transform);
         block.transform.SetParent(null, false);
         block.transform.localScale = Vector3.one * Mathf.Pow(amount, 1f / 3f);

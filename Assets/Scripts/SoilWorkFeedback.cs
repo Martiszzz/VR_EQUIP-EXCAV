@@ -1,4 +1,3 @@
-using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -8,9 +7,6 @@ public class SoilWorkFeedback : MonoBehaviour
     public DigSystem soil;
     public AudioClip soilLoop;
     public Shader dustShader;
-    public TMP_FontAsset gaugeFont;
-    public bool showBucketGauge=true;
-    public Vector3 gaugeOffsetMetres=new Vector3(0.3f,1.05f,0.1f);
     [Range(0,1)] public float soundVolume=0.3f;
     [Range(16,256)] public int dustBudget=128;
     [Min(5)] public float effectDistance=20;
@@ -19,9 +15,8 @@ public class SoilWorkFeedback : MonoBehaviour
     Material dustMaterial;
     Texture2D dustTexture;
     AudioClip generatedLoop;
-    TMP_Text gauge;
     Transform observer;
-    float work,clock,gaugeClock,activity;
+    float work,clock,activity;
     Vector3 workPosition;
     public int ParticleCount => dust?dust.particleCount:0;
     void Start()
@@ -57,30 +52,13 @@ public class SoilWorkFeedback : MonoBehaviour
             generatedLoop=AudioClip.Create("Soil rustle",samples.Length,1,12000,false);generatedLoop.SetData(samples,0);
         }
         sound.clip=soilLoop?soilLoop:generatedLoop;
-        if(showBucketGauge && soil && soil.bucket && gaugeFont)BuildGauge();
-    }
-    void BuildGauge()
-    {
-        var body=soil.bucket.GetComponentInParent<ExcavatorGrounding>();if(!body)return;
-        Transform mount=body.transform;
-        foreach(var driver in body.GetComponentsInChildren<PartDriver>())if(driver.useWorldAxis && driver.target){mount=driver.target;break;}
-        var go=new GameObject("Bucket load gauge",typeof(RectTransform),typeof(Canvas));go.transform.SetParent(mount,false);
-        go.GetComponent<Canvas>().renderMode=RenderMode.WorldSpace;
-        go.transform.SetPositionAndRotation(body.Pivot+body.transform.rotation*gaugeOffsetMetres,body.transform.rotation);
-        var scale=mount.lossyScale;go.transform.localScale=new Vector3(.001f/scale.x,.001f/scale.y,.001f/scale.z);
-        ((RectTransform)go.transform).sizeDelta=new Vector2(260,85);
-        var label=new GameObject("Load in cubic metres",typeof(RectTransform),typeof(TextMeshProUGUI));label.transform.SetParent(go.transform,false);
-        gauge=label.GetComponent<TMP_Text>();gauge.font=gaugeFont;gauge.fontSize=22;gauge.color=new Color(1,.8f,.35f);gauge.raycastTarget=false;
-        gauge.rectTransform.sizeDelta=new Vector2(260,85);
     }
     public void Report(Vector3 point,float volume)
-    {if(volume<=0)return;workPosition=point;work+=volume;}
+    {if(volume<=0 || (soil && !soil.IsWorkPoint(point)))return;workPosition=point;work+=volume;}
     void Update()
     {
         float dt=Time.deltaTime;if(dt<=0)return;
-        clock+=dt;gaugeClock+=dt;
-        if(gauge && gaugeClock>=.15f)
-        {gaugeClock=0;gauge.SetText("BUCKET {0:0}%\n{1:0.000} / {2:0.000} m3",soil.bucket.RatedFill*100,soil.bucket.HeldVolume,soil.bucket.RatedCapacity);}
+        clock+=dt;
         if(!dust || !sound || clock<.06f)return;
         bool near=!observer || (observer.position-workPosition).sqrMagnitude<effectDistance*effectDistance;
         float strength=near?Mathf.Clamp01(work/Mathf.Max(.00001f,.012f*clock)):0;

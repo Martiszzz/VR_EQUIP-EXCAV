@@ -26,6 +26,14 @@ public class BucketInside : MonoBehaviour
     readonly List<DirtBlock> captured = new List<DirtBlock>();
     BoxCollider volume;
     BoxCollider[] shell;
+    internal BoxCollider[] ShellContacts
+    {
+        get
+        {
+            if(shell==null){var teeth=GetComponentInParent<DigTeeth>();shell=(teeth?teeth.transform:transform).GetComponentsInChildren<BoxCollider>();}
+            return shell;
+        }
+    }
     public bool GradingContact { get; set; }
     public Bounds WorkBounds
     {
@@ -34,12 +42,7 @@ public class BucketInside : MonoBehaviour
             if (!volume) volume = GetComponent<BoxCollider>();
             var bounds = new Bounds(volume.center, volume.size);
             if (pourPoint) bounds.Encapsulate(transform.InverseTransformPoint(pourPoint.position));
-            if (shell == null)
-            {
-                var teeth = GetComponentInParent<DigTeeth>();
-                shell = (teeth ? teeth.transform : transform).GetComponentsInChildren<BoxCollider>();
-            }
-            foreach (var wall in shell)
+            foreach (var wall in ShellContacts)
             {
                 if (!wall || !wall.enabled || wall.isTrigger || wall.GetComponentInParent<DirtBlock>()) continue;
                 for (int x = -1; x <= 1; x += 2)
@@ -122,8 +125,21 @@ public class BucketInside : MonoBehaviour
         if (!volume) volume = GetComponent<BoxCollider>();
         var work = WorkBounds;
         float depth = 0;int contactCount=0;
-        // Sample the oriented bucket volume, including the floor, sides and lip.
-        // This also reads newly dug/deposited heights before the terrain collider syncs.
+        bool physicalShell=false;
+        // The trigger is cargo space, not steel. Testing its enclosing box sealed the open mouth against soil.
+        foreach(var wall in shell)
+        {
+            if(!wall || !wall.enabled || wall.isTrigger || wall.GetComponentInParent<DirtBlock>())continue;
+            physicalShell=true;
+            for(int x=-2;x<=2;x++)for(int y=-2;y<=2;y++)for(int z=-2;z<=2;z++)
+            {
+                if(Mathf.Abs(x)<2 && Mathf.Abs(y)<2 && Mathf.Abs(z)<2)continue;
+                var p=wall.transform.TransformPoint(wall.center+Vector3.Scale(wall.size*.25f,new Vector3(x,y,z)));
+                if(system.ContainsTerrainPoint(p))ConsiderGround(system,p,ref depth,ref contact,ref contactCount);
+            }
+        }
+        // Keep a conservative fallback for custom buckets that have not supplied any shell colliders.
+        if(!physicalShell)
         for (int x = -2; x <= 2; x++)
         for (int y = -2; y <= 2; y++)
         for (int z = -2; z <= 2; z++)

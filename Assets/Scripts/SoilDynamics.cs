@@ -8,7 +8,7 @@ public partial class DigSystem
     public Transform simulationObserver;
     [Min(5)] public float activeSoilDistance=30;
     public bool depthLayers = true;
-    [Min(0.05f)] public float clayDepth = 0.25f, compactedDepth = 0.7f;
+    [Min(0.05f)] public float clayDepth = 1.5f, compactedDepth = 3.5f;
     public bool simulateSlopes = true, makeTrackRuts = true;
     [Range(1,8)] public int soilTilesPerStep = 2;
     [Min(0.01f)] public float soilSlideSpeed = 0.45f;
@@ -61,7 +61,7 @@ public partial class DigSystem
     public SoilProperties SoilAt(Vector3 point)=>PropertiesFor(KindAt(point));
     public void Disturb(Vector3 point,float radius)
     {
-        if(!simulateSlopes || !ContainsTerrainPoint(point))return;
+        if(!IsWorkPoint(point) || !simulateSlopes || !ContainsTerrainPoint(point))return;
         var td=terrain.terrainData;var p=point-terrain.transform.position;var scale=td.heightmapScale;
         int tiles=(td.heightmapResolution-2)/TileSize+1;
         int x0=Mathf.Clamp(Mathf.FloorToInt((p.x-radius)/scale.x/TileSize),0,tiles-1),x1=Mathf.Clamp(Mathf.FloorToInt((p.x+radius)/scale.x/TileSize),0,tiles-1);
@@ -114,15 +114,15 @@ public partial class DigSystem
         var center=origin+new Vector3((x0+w*0.5f)*scale.x,0,(z0+h*0.5f)*scale.z);
         PaintDumped(center,Mathf.Max(w*scale.x,h*scale.z)*0.75f,1);
         // Allow a slide to cross tile boundaries, without simulating the rest of the landscape.
-        if(tx>0 && EdgeMoved(heights,0))Wake(key-1,8);
-        if(tx+1<tiles && EdgeMoved(heights,w-1))Wake(key+1,8);
-        if(tz>0 && RowMoved(heights,0))Wake(key-tiles,8);
-        if(tz+1<tiles && RowMoved(heights,h-1))Wake(key+tiles,8);
+        if(tx>0 && EdgeMoved(heights,patch.Original,0))Wake(key-1,12);
+        if(tx+1<tiles && EdgeMoved(heights,patch.Original,w-1))Wake(key+1,12);
+        if(tz>0 && RowMoved(heights,patch.Original,0))Wake(key-tiles,12);
+        if(tz+1<tiles && RowMoved(heights,patch.Original,h-1))Wake(key+tiles,12);
         return true;
     }
-    // Neighbor tiles are only woken when their shared border is actually steep.
-    static bool EdgeMoved(float[,] h,int x){for(int z=1;z<h.GetLength(0);z++)if(Mathf.Abs(h[z,x]-h[z-1,x])>0.01f)return true;return false;}
-    static bool RowMoved(float[,] h,int z){for(int x=1;x<h.GetLength(1);x++)if(Mathf.Abs(h[z,x]-h[z,x-1])>0.01f)return true;return false;}
+    // Neighbor tiles are only woken when their shared border actually changes.
+    static bool EdgeMoved(float[,] h,float[,] original,int x){for(int z=0;z<h.GetLength(0);z++)if(Mathf.Abs(h[z,x]-original[z,x])>1e-6f)return true;return false;}
+    static bool RowMoved(float[,] h,float[,] original,int z){for(int x=0;x<h.GetLength(1);x++)if(Mathf.Abs(h[z,x]-original[z,x])>1e-6f)return true;return false;}
     bool RelaxPair(float[,] h,int ax,int az,int bx,int bz,float distance,Vector3 origin,Vector3 scale,int x0,int z0,float dt)
     {
         float difference=(h[az,ax]-h[bz,bx])*scale.y;
@@ -132,7 +132,10 @@ public partial class DigSystem
         for(int region=SoilRegion.Active.Count-1;region>=0;region--)
             if(SoilRegion.Active[region] && SoilRegion.Active[region].Contains(point)){kind=SoilRegion.Active[region].kind;break;}
         var soil=PropertiesFor(kind);
-        float excess=Mathf.Abs(difference)-Mathf.Tan(soil.repose*Mathf.Deg2Rad)*distance-soil.cohesion;
+        if(!IsWorkPoint(point))return false;
+        float naturalDifference=Mathf.Abs(pushBaseHeights[z0+az,x0+ax]-pushBaseHeights[z0+bz,x0+bx])*scale.y;
+        float stableDifference=Mathf.Max(naturalDifference,Mathf.Tan(soil.repose*Mathf.Deg2Rad)*distance+soil.cohesion);
+        float excess=Mathf.Abs(difference)-stableDifference;
         if(excess<=0.002f)return false;
         float transfer=Mathf.Min(excess*0.25f,soilSlideSpeed*dt/(1+soil.adhesion*3))/scale.y;
         transfer=Mathf.Min(transfer,h[sz,sx],1-h[dz,dx]);

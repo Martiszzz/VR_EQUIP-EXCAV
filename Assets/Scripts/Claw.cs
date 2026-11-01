@@ -37,10 +37,15 @@ public class Claw : MonoBehaviour
     [Header("Kolizijų tikrinimas")]
     [Min(0.1f)] public float maxAngleStep = 2f;      // maksimalus nago pasukimas vienu tikrinimu (°)
     [Min(0.001f)] public float maxPushPerStep = 0.03f; // kiek daugiausia nagas pastumia rąstą per žingsnį (m)
+    [Min(.05f)] public float maxObjectPushSpeed=.3f;
+    [Min(10)] public float maxObjectPushForce=800;
     public LayerMask ignoreLayers = 0;               // sluoksniai, kurių nagai nelaiko kliūtimi (pvz. grindys)
 
     public float Closed { get; private set; }
     public bool HasObject => held;
+    public float CarriedMass => held?held.mass:0;
+    public Vector3 CarriedCenter => held?held.worldCenterOfMass:transform.position;
+    Collider[] heldColliders;
 
     Rigidbody held;
     bool heldWasKinematic;
@@ -89,7 +94,7 @@ public class Claw : MonoBehaviour
             float range = 1f;
             foreach (var j in jaws) range = Mathf.Max(range, Mathf.Abs(j.closedAngle - j.openAngle));
             int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(delta) * range / maxAngleStep), 1, 8);
-            for (int s = 0; s < steps && !(held); s++) MoveJaws(delta / steps);
+            for (int s = 0; s < steps && !(held); s++) MoveJaws(delta / steps,dt/steps);
         }
 
         float max = 0f;
@@ -97,7 +102,7 @@ public class Claw : MonoBehaviour
         Closed = max;
     }
 
-    void MoveJaws(float d)
+    void MoveJaws(float d,float stepTime)
     {
         if (previous == null || previous.Length != jaws.Length) previous = new float[jaws.Length];
         for (int i = 0; i < jaws.Length; i++)
@@ -107,11 +112,16 @@ public class Claw : MonoBehaviour
             previous[i] = j.amount;
             var terrain=DigSystem.I?DigSystem.I.terrain:Terrain.activeTerrain;
             float before=j.terrainContact?j.terrainContact.Depth(terrain):0;
+            var oldPoint=j.terrainContact?j.part.TransformPoint(j.terrainContact.WorkBounds.center):j.part.position;
+            if(j.terrainContact)before=Mathf.Max(0,before-j.terrainContact.softSoilDepth);
             j.amount = Mathf.Clamp01(j.amount + d);
             j.blocked = false;
             j.touching = null;
             ApplyPose(j);
+            if(j.terrainContact && j.terrainContact.canScrapeSoil && DigSystem.I)
+                DigSystem.I.ScrapeAttachmentSoil(j.terrainContact,j.part.TransformPoint(j.terrainContact.WorkBounds.center)-oldPoint);
             float after=j.terrainContact?j.terrainContact.Depth(terrain):0;
+            if(j.terrainContact)after=Mathf.Max(0,after-j.terrainContact.softSoilDepth);
             // Both opening and closing must respect fresh heightmap heights; allow escape from an existing overlap.
             if(after>penetrationTolerance && after>before+0.0001f)
             {j.amount=previous[i];ApplyPose(j);j.blocked=true;}
@@ -121,13 +131,7 @@ public class Claw : MonoBehaviour
         Physics.SyncTransforms();
 
         // 1) nagai stumia laisvus daiktus
-        for (int iter = 0; iter < 3; iter++)
-        {
-            bool pushed = false;
-            foreach (var j in jaws) if (j.part && PushOut(j)) pushed = true;
-            if (!pushed) break;
-            Physics.SyncTransforms();
-        }
+        foreach(var j in jaws)if(j.part)PushOut(j,stepTime);
 
         // 2) jei vis dar įlindę (statinė kliūtis arba rąstas suspaustas) - nagas lieka senoje pozicijoje
         for (int i = 0; i < jaws.Length; i++)
@@ -165,7 +169,7 @@ public class Claw : MonoBehaviour
     }
 
     // Pastumia laisvus Rigidbody, į kuriuos įlindo nagas. Grąžina true, jei ką nors pastūmė.
-    bool PushOut(Jaw jaw)
+    bool PushOut(Jaw jaw,float stepTime)
     {
         bool any = false;
         foreach (var a in jaw.contacts)
@@ -185,10 +189,11 @@ public class Claw : MonoBehaviour
                     && dist > 0.0005f)
                 {
                     // dir - kryptis, kuria turėtų judėti nagas; rąstą stumiame priešingai
-                    Vector3 move = -dir * Mathf.Min(dist, maxPushPerStep);
-                    rb.position += move;
-                    rb.transform.position = rb.position;
-                    rb.linearVelocity = Vector3.zero;
+                    Vector3 normal=-dir;
+                    float speed=Mathf.Min(maxObjectPushSpeed,dist/Mathf.Max(.02f,Time.fixedDeltaTime));
+                    float force=Mathf.Clamp(rb.mass*(speed-Vector3.Dot(rb.GetPointVelocity(bounds.center),normal))/.08f,0,maxObjectPushForce);
+                    rb.maxDepenetrationVelocity=.35f;
+                    rb.AddForceAtPosition(normal*force*Mathf.Clamp01(stepTime/Time.fixedDeltaTime),bounds.center,ForceMode.Force);
                     any = true;
                 }
             }
@@ -261,6 +266,11 @@ public class Claw : MonoBehaviour
         candidate.angularVelocity = Vector3.zero;
         candidate.isKinematic = true;
         candidate.transform.SetParent(grip, true);
+        var contact=candidate.GetComponent<GroundedAttachment>();if(!contact)contact=candidate.gameObject.AddComponent<GroundedAttachment>();
+        contact.canPushSoil=false;
+        heldColliders=candidate.GetComponentsInChildren<Collider>();
+        var terrain=DigSystem.I && DigSystem.I.terrain?DigSystem.I.terrain.GetComponent<TerrainCollider>():null;
+        if(terrain)foreach(var collider in heldColliders)Physics.IgnoreCollision(collider,terrain,true);
     }
 
     void Release()
@@ -268,7 +278,9 @@ public class Claw : MonoBehaviour
         if (!held) return;
         held.transform.SetParent(null, true);
         held.isKinematic = heldWasKinematic;
-        held.linearVelocity = Vector3.ClampMagnitude(gripVelocity, 3f);
+        var terrain=DigSystem.I && DigSystem.I.terrain?DigSystem.I.terrain.GetComponent<TerrainCollider>():null;
+        if(terrain && heldColliders!=null)foreach(var collider in heldColliders)if(collider)Physics.IgnoreCollision(collider,terrain,false);
+        held.linearVelocity = Vector3.ClampMagnitude(gripVelocity, 1.2f);held.angularVelocity=Vector3.zero;
         held.WakeUp();
         held = null;
     }

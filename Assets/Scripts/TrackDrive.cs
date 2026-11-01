@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class TrackDrive : MonoBehaviour
 {
@@ -72,7 +72,7 @@ public class TrackDrive : MonoBehaviour
             Vector3 old = excavator.position; Quaternion rotation = excavator.rotation;
             if (probe != null) probe.BeginMove();
             grounding.Settle(dt);
-            Accept(old, rotation, dt, false);
+            if(!grounding.UsesPhysicalSupport)Accept(old, rotation, dt, false);
             grounding.RefreshState();
             if (!grounding.IsGrounded) { velocity = yawVelocity = leftCmd = rightCmd = 0; return; }
         }
@@ -167,6 +167,7 @@ public class TrackDrive : MonoBehaviour
         if (probe == null) return true;
         Physics.SyncTransforms();
         float after = probe.Depth(true);   // true: grindų kontaktai iš apačios ignoruojami
+        probe.ResolveDynamicContacts(dt);
         if (workSoil && after <= probe.Tolerance) probe.WorkSoil(dt);
         float groundAfter = probe.GroundDepth();
         if (after <= probe.Tolerance && groundAfter <= probe.Tolerance) return true;
@@ -174,7 +175,9 @@ public class TrackDrive : MonoBehaviour
         excavator.SetPositionAndRotation(oldPos, oldRot);
         Physics.SyncTransforms();
         bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(true) - 0.0005f;
-        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
+        float beforeGround=probe.GroundDepth();
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < beforeGround - 0.000001f ||
+            (beforeGround<=.12f && groundAfter<=beforeGround+.00005f);
         if (worldAllowed && groundAllowed) { excavator.SetPositionAndRotation(p, q); return true; }
         probe.CancelMove();
         return false;

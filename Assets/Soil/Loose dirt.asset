@@ -15,7 +15,7 @@ MonoBehaviour:
   kind: 1
   density: 1600
   diggingResistance: 1
-  reposeAngle: 40
+  reposeAngle: 34
   cohesion: 0.012
   friction: 0.82
   softness: 0.55

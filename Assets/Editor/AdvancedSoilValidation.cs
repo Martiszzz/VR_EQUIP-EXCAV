@@ -75,7 +75,10 @@ public static class AdvancedSoilValidation
             teeth.Sweep(teeth.tip.position-Vector3.forward*0.08f,teeth.tip.position,0.02f);float hard=teeth.LastWorkVolume;
             Require(sand>hard*2 && hard>0,$"Soil resistance is indistinguishable: sand {sand}, compacted {hard}");
             UnityEngine.Object.DestroyImmediate(region.gameObject);
-            Require(w.soil.KindAt(new Vector3(7004,1.65f,7004))==SoilKind.Clay && w.soil.KindAt(new Vector3(7004,1.1f,7004))==SoilKind.Compacted,"Native soil depth layers missing");
+            float clayY=2-w.soil.clayDepth,compactedY=2-w.soil.compactedDepth;
+            Require(w.soil.KindAt(new Vector3(7004,clayY+.05f,7004))==SoilKind.Loam &&
+                w.soil.KindAt(new Vector3(7004,clayY-.1f,7004))==SoilKind.Clay &&
+                w.soil.KindAt(new Vector3(7004,compactedY-.1f,7004))==SoilKind.Compacted,"Configured native soil depth layers missing");
         }
         Debug.Log("TOOTH/MATERIAL PASS: lower edge cuts first, volume retained, hard soil resists and depth layers differ.");
     }

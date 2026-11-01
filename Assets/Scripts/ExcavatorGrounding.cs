@@ -2,11 +2,11 @@ using UnityEngine;
 
 // A rigid tracked undercarriage: support comes from the track footprint, not the cab pivot.
 [DefaultExecutionOrder(-50)]
-public class ExcavatorGrounding : MonoBehaviour
+public partial class ExcavatorGrounding : MonoBehaviour
 {
     public Transform chassis, leftTrack, rightTrack;
     public Terrain terrain;
-    [Range(5, 45)] public float maxDriveSlope = 32;
+    [Range(5, 45)] public float maxDriveSlope = 35;
     [Range(5, 50)] public float maxBodyTilt = 40;
     [Min(1)] public float tiltSpeed = 18;
     [Min(0.01f)] public float groundClearance = 0.012f;
@@ -125,7 +125,7 @@ public class ExcavatorGrounding : MonoBehaviour
     }
     void Gather(Vector3 position, Quaternion rotation)
     {
-        sampleCount=massModel && massModel.BladeSupported?13:12;
+        sampleCount=!UsesPhysicalSupport && massModel && massModel.BladeSupported?13:12;
         if(sampleCount==13)contacts[12]=chassis.InverseTransformPoint(massModel.BladePoint);
         for (int i = 0; i < sampleCount; i++)
         {
@@ -190,7 +190,8 @@ public class ExcavatorGrounding : MonoBehaviour
     float Height(Quaternion rotation)
     {
         float y = float.NegativeInfinity;
-        for (int i = 0; i < sampleCount; i++) if (found[i])
+        // A blade is an external force/support, never an extra track that raises the fitted floor.
+        for (int i = 0; i < 12; i++) if (found[i])
             y = Mathf.Max(y, surface[i].y + groundClearance - (rotation * Vector3.Scale(contacts[i], chassis.lossyScale)).y);
         return y;
     }
@@ -198,6 +199,7 @@ public class ExcavatorGrounding : MonoBehaviour
     {
         HydraulicLoad = Mathf.MoveTowards(HydraulicLoad,0,dt*1.5f);
         if (!Ready || dt <= 0) return;
+        if(UsesPhysicalSupport){StepPhysicalSupport(dt);return;}
         Gather(chassis.position, chassis.rotation);
         bool supported = Plane(true, out var normal);
         if (!supported) supported = Plane(false, out normal);
@@ -224,6 +226,7 @@ public class ExcavatorGrounding : MonoBehaviour
     {
         if (!Ready) return;
         Gather(chassis.position, chassis.rotation);
+        if(UsesPhysicalSupport){RefreshPhysicalContact();return;}
         bool stable = Plane(true, out var normal);
         SupportNormal = stable ? normal : chassis.up;
         Slope = Vector3.Angle(SupportNormal, Vector3.up);
@@ -235,6 +238,7 @@ public class ExcavatorGrounding : MonoBehaviour
     {
         fittedPosition = position; fittedRotation = heading;
         if (!Ready) return false;
+        if(UsesPhysicalSupport)return PhysicalMoveAllowed(position,heading);
         Gather(position, heading);
         if (!Plane(true, out var normal) || Vector3.Angle(normal, Vector3.up) > maxDriveSlope) return false;
         // Settle handles pitch/roll once per physics tick; driving preserves that stance and changes heading.
@@ -252,6 +256,7 @@ public class ExcavatorGrounding : MonoBehaviour
     }
     public bool TryHydraulicReaction(Vector3 tool,float depth,float dt,float effort=1)
     {
+        if(UsesPhysicalSupport){RequestToolForce(tool,depth,effort);return false;}
         if(!Ready || !Ignition.EngineRunning || depth<=0 || depth>0.08f || dt<=0)return false;
         Gather(chassis.position,chassis.rotation);
         var direction=Vector3.ProjectOnPlane(tool-Pivot,Vector3.up).normalized;

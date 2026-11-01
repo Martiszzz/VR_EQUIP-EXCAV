@@ -10,6 +10,10 @@ public class DigTeeth : MonoBehaviour
     [Min(0.1f)] public float maxSweepDistance = 1f;
     [Range(0.02f, 0.3f)] public float maxPushDepth = 0.16f;
     [Range(3,9)] public int toothCount = 5;
+    [Header("Cutting resistance")]
+    [Min(0)] public float depthResistanceMultiplier=.08f;
+    [Min(1)] public float maxResistance=4;
+    [Range(0,1)] public float speedResistanceMultiplier=.12f;
     readonly Vector3[] toothStart=new Vector3[9];
     bool toothSweepPrepared;
     SoilKind carriedKind=SoilKind.Loam;
@@ -69,6 +73,8 @@ public class DigTeeth : MonoBehaviour
         var box=s.bucket.GetComponent<BoxCollider>();
         float width=box.size.x*Mathf.Abs(s.bucket.transform.lossyScale.x)*0.9f;
         float toothRadius=Mathf.Min(radius,Mathf.Max(width/(count-1)*0.65f,0.015f));
+        var cell=s.terrain.terrainData.heightmapScale;
+        toothRadius=Mathf.Max(toothRadius,new Vector2(cell.x,cell.z).magnitude*1.05f);
         for(int tooth=0;tooth<count && budget>0;tooth++)
         {
             Vector3 end=ToothPosition(tooth);
@@ -83,12 +89,21 @@ public class DigTeeth : MonoBehaviour
                 if(penetration<=0.005f)continue;
                 var soil=s.SoilAt(point);carriedKind=s.KindAt(point);
                 float attack=Mathf.Lerp(0.65f,1,Mathf.Clamp01(Vector3.Dot(motion.normalized,s.bucket.transform.TransformDirection(s.bucket.lipAxis.normalized))));
-                float resistance=soil.resistance*(1+Mathf.Clamp01(penetration/0.25f))*(1+Mathf.Clamp(stroke/Mathf.Max(dt,0.001f),0,3)*0.25f)/attack;
+                float depthBelowSurface=Mathf.Max(0,s.OriginalSurfaceY(point)-point.y);
+                float resistance=Mathf.Min(maxResistance,soil.resistance*(1+Mathf.Min(.35f,depthBelowSurface*depthResistanceMultiplier))*(1+Mathf.Clamp(stroke/Mathf.Max(dt,0.001f),0,2)*speedResistanceMultiplier)/attack);
                 LastResistance=Mathf.Max(LastResistance,resistance);
                 float depth=Mathf.Min(penetration,maxDepthPerStep,stroke/steps*cutPerMeter)/Mathf.Max(0.5f,resistance);
                 float removed=s.Dig(point,toothRadius,depth,budget,point.y);
                 LastWorkVolume+=removed;carry+=removed;budget-=removed;
             }
+        }
+        if(LastWorkVolume<=0.0000001f)
+        {
+            // A back/side wall can meet a pit edge while the teeth are already in the cleared cavity.
+            // Displace that shallow contact; never collect soil merely by pressing the bucket floor.
+            float pushed=s.PushBucketSoil(s.bucket,motion,maxPushDepth);
+            if(pushed<=0.0000001f)pushed=s.ScrapeBucketSides(s.bucket,motion,maxPushDepth);
+            if(pushed>0){LastWorkVolume=pushed;LastResistance=s.SoilAt(p).resistance;}
         }
         toothSweepPrepared=false;
         while (carry + s.BlockVolume * 0.0001f >= s.BlockVolume && s.CanSpawn)
@@ -107,9 +122,21 @@ public class DigTeeth : MonoBehaviour
         var leading = Vector3.ProjectOnPlane(container.pourPoint.position-container.transform.TransformPoint(box.center),Vector3.up);
         var horizontal = Vector3.ProjectOnPlane(motion,Vector3.up);
         if (leading.sqrMagnitude>1e-8f && Vector3.Dot(horizontal,leading.normalized)>motion.magnitude*0.15f) return true;
-        var b=container.WorkBounds; float bottom=float.PositiveInfinity;
-        for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
-            bottom=Mathf.Min(bottom,container.transform.TransformPoint(b.center+Vector3.Scale(b.extents,new Vector3(x,y,z))).y);
+        float bottom=float.PositiveInfinity;
+        // A rotated enclosing cargo box has imaginary low corners across the open mouth.
+        // Judge the tooth attack against actual steel, just as the ground constraint does.
+        foreach(var wall in container.ShellContacts)
+        {
+            if(!wall || !wall.enabled || wall.isTrigger || wall.GetComponentInParent<DirtBlock>())continue;
+            for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
+                bottom=Mathf.Min(bottom,wall.transform.TransformPoint(wall.center+Vector3.Scale(wall.size*.5f,new Vector3(x,y,z))).y);
+        }
+        if(float.IsPositiveInfinity(bottom))
+        {
+            var b=container.WorkBounds;
+            for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2)
+                bottom=Mathf.Min(bottom,container.transform.TransformPoint(b.center+Vector3.Scale(b.extents,new Vector3(x,y,z))).y);
+        }
         // A downward bite requires the teeth to be the lowest edge, rather than pressing the bucket floor.
         return motion.y < -motion.magnitude*0.2f && container.pourPoint.position.y<=bottom+0.04f &&
             Vector3.Dot(container.transform.TransformDirection(container.openingAxis.normalized),Vector3.up)<0.75f;

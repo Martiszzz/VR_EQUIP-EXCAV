@@ -8,6 +8,8 @@ public class ExcavatorMass : MonoBehaviour
     public Transform boomPivot, stickPivot, toolPivot;
     public BucketInside bucket;
     public Transform blade;
+    public Claw claw;
+    public float CargoMass => (bucket?bucket.HeldMass:0)+(claw?claw.CarriedMass:0);
     [Min(100)] public float baseMass=1700;
     [Min(1)] public float boomMass=170,stickMass=100,toolMass=70;
     public Vector3 baseCenterOfMassMetres=new Vector3(0,0.55f,0);
@@ -17,7 +19,7 @@ public class ExcavatorMass : MonoBehaviour
     public bool BladeSupported {get;private set;}
     public Vector3 BladePoint {get;private set;}
     GroundedAttachment bladeContact;
-    void Awake(){Step();}
+    void Awake(){if(!claw)claw=GetComponentInChildren<Claw>();Step();}
     void FixedUpdate(){Step();}
     public void Step()
     {
@@ -29,6 +31,7 @@ public class ExcavatorMass : MonoBehaviour
         if(stickPivot && toolPivot)Add((stickPivot.position+toolPivot.position)*0.5f,stickMass,ref moment);
         if(toolPivot)Add(toolPivot.position,toolMass,ref moment);
         if(bucket)Add(bucket.SoilCenterOfMass,bucket.HeldMass,ref moment);
+        if(claw && claw.CarriedMass>0)Add(claw.CarriedCenter,claw.CarriedMass,ref moment);
         CenterOfMass=moment/Mathf.Max(1,TotalMass);
         BladeSupported=false;
         if(blade && grounding && grounding.terrain)

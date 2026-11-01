@@ -41,6 +41,7 @@ public class DirtBlock : MonoBehaviour
         if (grainCollider) grainCollider.size = originalColliderSize;
         transform.SetPositionAndRotation(pos, Quaternion.identity);
         gameObject.SetActive(true);
+        rb.position=pos;rb.rotation=Quaternion.identity;
         rb.isKinematic = false;
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;

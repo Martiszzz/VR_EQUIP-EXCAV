@@ -87,21 +87,21 @@ public static class SoilInteractionValidation
             Require(soil && soil.feedback && soil.soilMaterials.Length==4 && soil.soilMaterials.All(p=>p),level+" lacks soil profiles/effects");
             Require(soil.terrain.GetComponent<TerrainCollider>().terrainData==soil.terrain.terrainData,level+" terrain collider has different terrain data");
             var contacts=UnityEngine.Object.FindAnyObjectByType<ExcavatorContacts>();Require(contacts,level+" has no collision setup");contacts.Initialize();
-            Require(contacts.GetComponent<Rigidbody>().collisionDetectionMode==CollisionDetectionMode.ContinuousSpeculative,level+" chassis lacks kinematic CCD");
+            Require(!contacts.GetComponent<Rigidbody>().isKinematic && contacts.GetComponent<ExcavatorGrounding>().UsesPhysicalSupport,level+" chassis lacks force-based support");
             foreach(var driver in contacts.GetComponentsInChildren<PartDriver>())
             {
                 if(!driver.target || driver.useWorldAxis || !driver.limit || driver.target.GetComponent<DigTeeth>() || !driver.target.GetComponent<MeshFilter>())continue;
                 var contact=driver.target.GetComponent<GroundedAttachment>();Require(contact && !contact.includeChildren,level+" arm contact missing or includes child bucket volume");
                 Require(driver.target.GetComponents<Collider>().Any(c=>!c.isTrigger),level+" physical arm collider missing");
             }
-            Require(soil.feedback.gaugeFont && soil.feedback.dustShader,level+" gauge font or standalone dust shader reference missing");
+            Require(soil.feedback.dustShader,level+" standalone dust shader reference missing");
             foreach(var claw in contacts.GetComponentsInChildren<Claw>())
             {
                 typeof(Claw).GetMethod("Awake",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(claw,null);
                 foreach(var jaw in claw.jaws)Require(jaw.terrainContact && jaw.contacts.Length>0,level+" referenced jaw has no physical terrain constraint");
             }
             typeof(SoilWorkFeedback).GetMethod("Start",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(soil.feedback,null);
-            if(soil.bucket)Require(contacts.GetComponentsInChildren<TMPro.TMP_Text>().Any(t=>t.name=="Load in cubic metres"),level+" has no world-space load gauge");
+            Require(!contacts.GetComponentsInChildren<TMPro.TMP_Text>().Any(t=>t.name=="Load in cubic metres"),level+" still has a capacity UI");
         }
     }
     static void Require(bool value,string message){if(!value)throw new Exception(message);}

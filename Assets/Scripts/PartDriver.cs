@@ -23,6 +23,7 @@ public class PartDriver : MonoBehaviour
     ExcavatorBody.Probe probe;
     ExcavatorHydraulics circuit;
     float cuttingResistance=1;
+    float acceptedFraction=1;
     public float RequestedFlow => !Ignition.EngineRunning || !lever ? 0 : Mathf.Clamp01((Mathf.Abs(input==Axis.Forward?lever.Forward:lever.Side)-deadzone)/Mathf.Max(0.01f,1-deadzone));
     public float Angle => angle;
     public float AngularVelocity => angularVelocity;
@@ -77,11 +78,14 @@ public class PartDriver : MonoBehaviour
             if (probe != null) probe.BeginMove();
             if (useWorldAxis) target.Rotate(target.parent ? target.parent.TransformDirection(localAxis.normalized) : localAxis.normalized, candidate - angle, Space.World);
             else target.localRotation = restRotation * Quaternion.AngleAxis(candidate, localAxis.normalized);
+            acceptedFraction=1;
             if (probe != null && Mathf.Abs(candidate - angle) > 0.0001f && !Accept(old, deltaTime / steps))
             {
-                angularVelocity = 0;
+                angularVelocity *= .5f;
                 return;
             }
+            if(acceptedFraction<.999f)
+            {angle=Mathf.Lerp(angle,candidate,acceptedFraction);angularVelocity*=.35f;return;}
             angle = candidate;
         }
         angle = limit ? next : Mathf.Repeat(next + 180f, 360f) - 180f;
@@ -89,8 +93,11 @@ public class PartDriver : MonoBehaviour
 
     bool Accept(Quaternion old, float dt)
     {
+        acceptedFraction=1;
+        probe.AlignLinkages();
         Physics.SyncTransforms();
         float after = probe.Depth(false);
+        probe.ResolveDynamicContacts(dt);
         // Dig along the actual tooth sweep before testing the remaining terrain contact.
         // Do not excavate through a solid obstacle such as the cab or a wall.
         if (after <= probe.Tolerance) HydraulicLoad=Mathf.Max(HydraulicLoad,Mathf.Clamp01(probe.WorkSoil(dt)/Mathf.Max(dt,0.001f)/0.012f));
@@ -101,11 +108,29 @@ public class PartDriver : MonoBehaviour
         if(groundAfter>probe.Tolerance)HydraulicLoad=1;
         Quaternion moved = target.localRotation;
         target.localRotation = old;
+        probe.AlignLinkages();
         Physics.SyncTransforms();
         // jei judesys mažina persidengimą (dalis išlenda), leidžiam
         bool worldAllowed = after <= probe.Tolerance || after < probe.Depth(false) - 0.0005f;
-        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < probe.GroundDepth() - 0.0001f;
-        if (worldAllowed && groundAllowed) { target.localRotation = moved; return true; }
+        float beforeGround=probe.GroundDepth();
+        bool groundAllowed = groundAfter <= probe.Tolerance || groundAfter < beforeGround - 0.000001f ||
+            (beforeGround<=.12f && groundAfter<=beforeGround+.00005f);
+        if (worldAllowed && groundAllowed) { target.localRotation = moved;probe.AlignLinkages();return true; }
+        // An already obstructed starting pose has no admissible interval to bisect. Repeating seven
+        // complete jaw/terrain queries every tick caused severe stalls while holding a tool down.
+        if(beforeGround>probe.Tolerance && !groundAllowed)
+        {probe.CancelMove();return false;}
+        // Keep the admissible part of a stroke instead of alternating full steps and full rollbacks at contact.
+        float low=0,high=1;
+        for(int i=0;i<7;i++)
+        {
+            float middle=(low+high)*.5f;target.localRotation=Quaternion.Slerp(old,moved,middle);probe.AlignLinkages();Physics.SyncTransforms();
+            if(probe.Depth(false)<=probe.Tolerance && probe.GroundDepth()<=probe.Tolerance)low=middle;else high=middle;
+        }
+        target.localRotation=Quaternion.Slerp(old,moved,low);probe.AlignLinkages();Physics.SyncTransforms();
+        if(low>.005f){acceptedFraction=low;return true;}
+        target.localRotation=old;
+        probe.AlignLinkages();Physics.SyncTransforms();
         probe.CancelMove();
         return false;
     }

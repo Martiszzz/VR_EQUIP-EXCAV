@@ -1,59 +1,58 @@
 # Grunto ir ekskavatoriaus sąveika
 
-## Auditas ir prasilindimo priežastis
+Unity 6000.6.3f1, URP, XR Interaction Toolkit ir OpenXR. Level 1 turi kaušą, Level 2 – rąstų griebtuvą. Griebtuvas nepakeistas kaušu.
 
-Projektas naudoja Unity 6000.6.3f1, URP, XR Interaction Toolkit ir OpenXR su Meta Quest palaikymu. Pirmame lygyje yra kaušas, antrame – rąstų griebtuvas. Antrame lygyje kaušas nepridedamas: bendri pataisymai taikomi strėlei, rankai, griebtuvui, peiliui, važiuoklei ir gruntui.
+## Fizikos modelis ir pataisymai
 
-Dalys valdomos `PartDriver` tiesiogiai keičiant `Transform` kampą; artikuliacijų ar fizinių vyrių grandinės nėra. `ExcavatorBody` tikrina siūlomą pozą. Jo pasaulio kliūčių patikra sąmoningai praleisdavo reljefą, o `BucketInside.GroundPenetration` grąžindavo nulį visam tuščiam kaušui, kol likdavo vietos naujoms žemėms. Todėl turėti TerrainCollider ar įjungti CCD neužteko. Be to, antrame lygyje nėra `BucketInside`, todėl vien kaušo patikra jo įrankio neapsaugojo.
+1. **Važiuoklės atrama.** `ExcavatorSuspension` taiko dinaminiam šakniniam Rigidbody atskiras spyruoklės ir slopintuvo jėgas dvylikoje vikšrų taškų. Peilio taškas nebenaudojamas kaip papildomas visos mašinos aukščio matmuo. Peilio / kaušo reakcija perduodama per `AddForceAtPosition` tikroje kontakto vietoje. Jėgos riba apskaičiuojama pagal masių centro momentą apie priešingus vikšrų taškus. Atitinkamas galas gali pakilti; gravitacija ir slopintuvai grąžina mašiną pakėlus įrankį. Krovinys ir laikomas rąstas keičia masę bei masių centrą. Kaušo kinematinis Rigidbody paleidžiant pašalinamas: jo apvalkalo kontaktai priklauso bendram važiuoklės kūnui. Atskirai likęs kinematinis vaikinis kūnas laikė kaušą kitoje pasaulio vietoje ir savo kontaktais galėjo stumti pačią važiuoklę į reljefą.
+2. **Minkštas griebtuvo kontaktas ir rąstai.** Mašinos reljefo kontaktus sprendžia atramos ir deformacija, todėl TerrainCollider nebeišstumia judančio įrankio staigiu impulsu. Griebtuvo žnyplėms leidžiama iki 6 cm valdoma minkšto grunto kontakto zona. Judinamos jos plonai nugramdo gruntą ir perkelia jį šalia, išsaugodamos tūrį. Kietos kliūtys lieka tikrinamos. Įrankių medžiaga turi nulinį atšokimą; judinamiems objektams taikoma ribota jėga, 0,35 m/s išstūmimo riba ir slopinimas. Ankstesnis tiesioginis rąsto Rigidbody pozicijos taisymas pašalintas. Žnyplių subžingsniai dalijasi vieno žingsnio jėgos biudžetu. Dinaminės atramos slėgio užklausa nebetikrina ir neatstato visos važiuoklės pozos kiekvieno įrankio kontakto metu; jau užblokuotai pradinei pozai nebevykdomos septynios beprasmės visos kontaktų geometrijos paieškos. Jungtinis žnyplės kontaktas ir jo vaikiniai kontaktai nebeapdoroja to paties paviršiaus pakartotinai.
+3. **Gilus kasimas.** Pasipriešinimą daugiausia lemia medžiaga, atakos kampas ir greitis. Gylio priedas švelnus ir ribotas. Abiejose scenose molio sluoksnio pradžia perkelta į 1,5 m, sutankinto – į 3,5 m. Tikras pradinis strėlės diapazonas leido dantims pasiekti tik apie 1,26 m žemiau vikšrų: Bone_1 didžiausias kampas padidintas nuo 30° iki 60°, geometrinis pasiekiamumas dabar apie 2,28 m. Krovinio trigger dėžė nebelaikoma uždaru plieno tūriu: tikrinamas atviras kauso apvalkalas. Dantų atakos kampas vertinamas pagal tikro plieninio apvalkalo apačią, ne neegzistuojančius žemai pasisukusios krovinio dėžės kampus. Dantų pjovimo plotis atsižvelgia į Terrain langelio dydį; ties sąlyčiu priimama saugi dalis judesio, galima slysti negiliu kontaktu ir ištraukti įrankį. Į duobės kraštą atsirėmęs šoninis pjaunantis kraštas gali nustumti ploną sluoksnį į šoną, išsaugodamas gruntą vietiniame pylimėlyje; tai nepildo kaušo ir neleidžia kasti spaudžiant dugno vidurį žemyn.
+4. **Duobės ir šlaitai.** Vikšrų taškai gali atskirai prarasti atramą. Važiavimo riba scenose – 35°. Stačias laiptas savaime netampa įveikiamu šlaitu: reikia nuvažiuojamos rampos arba ją suformuoti įrankiu. Slinkimas tvarko sutrikdytą gruntą ir pažadina gretimus blokus tik kai iš tikrųjų pasikeičia jų riba. Natūralūs nejudinti šlaitai nėra globaliai išlyginami.
+5. **Peilis ir vikšrai.** Peilio judesys nukerpa vietinį sluoksnį, užpildo žemesnes vietas priekyje, kaupia pylimą ir leidžia daliai grunto nutekėti pro galus. Supilama tik tiek, kiek pašalinama. Pašalintas absoliutus pradinio paviršiaus gylio draudimas, blokavęs darbą iškastos duobės dugne. Stumiamo tūrio apkrova lėtina važiavimą. Minkšto grunto vikšrų vėžės lieka negilios ir išstumia gruntą į kraštus.
+6. **Reljefas ir kolideris.** Viena aukščių talpykla aptarnauja dantis, įrankių kontaktus ir vaizdo pakeitimus. Po visų komandinių judesių kiekviename FixedUpdate vykdomas `SyncHeightmap`. Fizinė ir vaizdinė geometrija nebelaukia ankstesnio 80 ms tarpo. Paviršius imamas pagal tuos pačius trikampius kaip Unity Terrain. Slinkimas mažina naujų iškasų / pylimų briaunas, nekurdamas papildomo tūrio.
+7. **Tolimos dėmės.** Dažomi tik iš tikrųjų pakeisti aukščių langeliai, todėl netaisyklingas natūralus reljefas pats savaime nepalieka rudų dėmių. Deformacija ir efektai atmeta netaisyklingas koordinates ir vietas už darbo spindulio. Aktyvuojant fondo grunto objektą iš naujo nustatoma ir Rigidbody poza, kad nepasireikštų sena interpoliuota pozicija.
+8. **Jokio talpos UI.** `SoilWorkFeedback` nebekuria TMP rodmens; pašalinti jo scenų nustatymai. Vidinė tūrio ir masės apskaita bei palaipsniui mažėjantis kauburio tinklas išlaikyti. Dulkių ir garso efektai lieka.
 
-Pradinės scenos turi `TerrainCollider`, dėžinius kaušo / peilio kontaktus, kinematinį pirmo lygio įrankio Rigidbody ir dinaminį antro lygio rąstą. Reljefas keičiamas per TerrainData aukščių žemėlapį. Veikė vietinis šlaitų slinkimas, tūrio apskaita grunto gabalais, kaušo užpildo tinklas, vikšrų atramos, siurblys ir masių modelis.
+Važiavimo X/Z ir kabinos posūkio komandos tebėra valdomos saugomais pozos žingsniais; Y, posvyris ir pasvirimas į šoną sprendžiami dinaminiu Rigidbody. Strėlė ir žnyplės naudoja esamus ribotus FK judesius, ne ArticulationBody vyrių grandinę. Gruntas – konservuojamas aukščių žemėlapis su ribotu krentančių gabalų fondu, ne pilna birių dalelių simuliacija.
 
-## Kas pakeista
+## Inspector derinimas
 
-- Tuščiam kaušui leidžiama tik ribota dantų įpjova (`maximumToothPenetration`, numatyta 0,045 m), tik dirbant tikriems dantims. Kaušo dugnas, pasyvus kritimas, pilnas kaušas ir išnaudotas gabalėlių limitas šios išimties neturi. Judesys skaidomas pagal toliausiai nuo vyrio esantį koliderį, siekiant ne didesnio kaip 8 mm patikros žingsnio.
-- Abiejų scenų `ExcavatorContacts` paleidimo metu paruošia judančių dalių primityvius kontaktus. Strėlės ir rankos patikra apima tik jų pačių koliderius, todėl visas vaikiškas kaušo tūris nelaikomas vientisu strėlės bloku. Esami kaušo apvalkalo kontaktai išlaikomi. Griebtuvo žnyplės tikrinamos ir atidarant, ir uždarant; iš jau įvykusio persidengimo galima ištraukti įrankį.
-- Kinematiniams mašinos Rigidbody naudojamas `ContinuousSpeculative`, interpolacija ir vietiniai 10/4 solverio žingsniai. Krentantis gruntas lieka `ContinuousDynamic`. Bendri solverio nustatymai – 8/2, didžiausias išstūmimo greitis – 2 m/s. Fiksuotas žingsnis paliktas 0,02 s: judesio saugą užtikrina papildomi pozos patikros žingsniai, o ne visos fizikos dažnio didinimas.
-- Kaušas turi kubiniais metrais išreikštą talpą ir serializuotą esamą tūrį. `ratedCapacityCubicMetres = 0` automatiškai kalibruoja iš esamos krovinio dėžės ir senos gabalų talpos. `heapedFraction = 0,15` leidžia rodyti iki maždaug 115 % nominalios talpos. Nominali talpa visada ribojama geometrine krovinio erdve; didelis skaičius Inspector lange nesukuria neriboto kaušo.
-- Užpildo tinklas normalizuojamas pagal laikomą tūrį. Vidurinė dalis gali iškilti virš krašto, kraštai lieka žemiau. Pasvirimas perstumia užpildą, išpylimas mažina jį palaipsniui. Paslėptiems apskaitos gabalams nebeieškoma atsitiktinių nesikertančių pozicijų ir nebekuriami laikini pozicijų masyvai.
-- Numatyta išpylimo riba – 0,014 m³/s ir daugiausia 32 laisvi dinaminiai grunto gabalai. Pasiekus ribą likęs tūris pasilieka kauše; atsilaisvinus vietai išpylimas tęsiamas be sukaupto vieno kadro pliūpsnio. Laikomi gabalai yra kinematiniai, nematomi, išjungtais kolideriais. Esamas objektų fondas naudojamas pakartotinai.
-- `Assets/Soil` yra keturi redaguojami `SoilMaterialProfile` ištekliai: Sand, Loose dirt, Clay, Compacted. Jie valdo tankį, kasimo pasipriešinimą, birėjimo kampą, sankibą, trintį ir minkštumą. Išpiltų gabalų grunto rūšis išsaugoma grubiuose medžiagos blokuose; tai nėra smulkių atskirų sluoksnių ar skirtingų medžiagų mišinių simuliacija.
-- Didesnis įgilinimas ir greitis didina pjovimo pasipriešinimą. Krovinio masė mažina hidraulinį greitį bei pagreitį. Peilio apkrova priklauso nuo stumiamo tūrio ir medžiagos; ji lėtina važiavimą. Žemės perkeliamos į priekinį pylimą ir aplink peilio galus, išlaikant tūrį.
-- Hidraulinis kėlimas tikrinamas pagal svorio momentą apie priešingą vikšrų atramą. Jėga turi viršyti svorio, masių centro ir įrankio peties nustatytą slenkstį. Mašina sukama apie atramą, o ne visa perkeliama aukštyn. Posvyris ir greitis riboti, nusėdimas slopinamas.
-- Vienas `SoilWorkFeedback` emiteris aptarnauja kasimą, stūmimą ir išpylimą: iki 128 dulkių dalelių, erdvinis žemių šiurenimas ir pirmo lygio pasaulinis talpos rodmuo kabinoje. Garsui galima priskirti savo `soilLoop`; be jo naudojamas sukurtas triukšmo ciklas. Hidraulinė apkrova perduoda silpnus trumpus impulsus tik laikomam valdikliui, kartu išlaikant svirties galinės padėties vibraciją.
-
-## VR apkrovos ribos
-
-`TerrainSoilCache` saugo dabartinius aukščius ir pakartotinai naudoja redagavimo langus. Po apšilimo pasikartojantiems langų dydžiams nekuriami nauji aukščių / pjūvio masyvai. Persidengiantys stūmimo ir supylimo langai taiko aukščio skirtumus, todėl vienas negali užrašyti kito ką tik supiltos žemės. Išoriniai TerrainData pakeitimai invaliduoja talpyklą.
-
-Kontaktai ir pradinis reljefas interpoliuojami pagal tuos pačius langelio trikampius kaip Unity Terrain. Bilinearinis keturkampio vidurkis ties aštria iškasos briauna davė kitą aukštį; tai galėjo sukelti klaidingą atramą ar nudažyti nepakeistą vietą. Dažymas lygina vaizduojamą reljefą su taip pat interpoliuotu pradiniu paviršiumi.
-
-Šlaitų simuliacija atnaujina numatytus du 16 langelių blokus per ciklą; už 30 m nuo stebėtojo esantys blokai atidedami. Aukščiai ir reljefo kolideris sinchronizuojami kas 0,08 s, o kontaktai tuo metu jau mato naujausius aukščius. Dažymas apdoroja du 32×32 blokus per ciklą naudodamas vieną masyvą. Smulkių išpylimo grūdelių limitas sumažintas iki 600, jų kolizijos nenaudoja dinaminių kūnų.
-
-Tai lengvas kinematinės hidraulikos ir aukščių žemėlapio modelis, ne birių dalelių/FEM ar visiškai dinaminė ArticulationBody mašina. VR FPS dar nematuotas su Quest 2; 72–90 FPS nėra garantuojamas vien šiomis automatinėmis patikromis. Matuoti reikia tikrame build'e, ne vien redaktoriuje.
-
-## Derinimas ir patikra Play režimu
-
-1. **Abu lygiai, kontaktai:** užkurti mašiną, nuleisti įrankį ir strėlę į žemę, bandyti greitai sukti abiem kryptimis. Įrankis turi sustoti arba kasti / stumti tik leistiną sluoksnį. Išjungus variklį pasyvus judesys neturi kasti. Antrame lygyje patikrinti ir žnyplių atidarymą prie grunto.
-2. **Pirmas lygis, krovinys:** dantimis kasti pirmyn ir užlenkti kaušą. Kabinos rodmuo turi didėti, viršutinė užpildo dalis – sudaryti kauburį. Pakelti, važiuoti ir pasukti: krovinys neturi iškristi pro sieneles. Greitai išversti: turinys turi mažėti kartu su srautu, o reljefas pakilti nusileidimo vietoje.
-3. **Pylimas ir medžiagos:** palyginti Sand ir Clay profilius ar `SoilRegion.kind` zonas. Smėlis turi lengviau kastis ir labiau slinkti; molis – labiau priešintis ir ilgiau laikytis kauše. Tikrinti mažą duobę ir pylimą: neturi pakisti tolimas nejudintas reljefas.
-4. **Peilis:** nuleisti iki grunto ir važiuoti pirmyn. Turi formuotis pylimas, sunkėjant gruntui mažėti greitis. Pakėlus peilį normali eiga turi grįžti. Bandymas stipriai spausti peilį žemyn turi kelti atitinkamą važiuoklės kraštą.
-5. **Atrama kaušu:** dantų / dugno atramą pastatyti ant žemės ir spausti strėle žemyn. Priešingas vikšrų kraštas turi likti atramoje. Pakėlus įrankį važiuoklė turi nusėsti. Derinti `maximumHydraulicForce` (18 000 N), `liftThreshold` (1,1), `maxHydraulicTilt` (10°), `hydraulicTiltSpeed` ir `settlingDamping` (0,25 s). Masės ir bazinis masių centro poslinkis yra `ExcavatorMass`.
-6. **VR našumas:** stebėti CPU Physics, skriptus, GC ir GPU kasant, sukant bei ilgai pilant. Pirmiausia mažinti `maxLooseBodies`, `soilTilesPerStep`, `paintTilesPerFlush` ir dulkių / smulkių grūdelių limitus. Haptikos stiprumas – `LeverTilt.hapticStrength`; efektų atstumas ir garsumas – `SoilWorkFeedback`.
-
-Automatinės patikros: `RealisticControlValidation.Run` tikrina ankstesnį valdymą, kaušą, tūrį, peilį, garsą, mases ir važiavimą; `SoilInteractionValidation.Run` – naujus kontaktų saugiklius, kauburį, fizinių gabalų limitą, talpyklos atnaujinimą, jėgos slenkstį ir tikrų scenų integraciją. Abu metodai skirti atskiram Unity batch procesui ir jį užbaigia.
-
-Pakeistos scenos: `Assets/Scenes/Level 1.unity`, `Assets/Scenes/Level 2.unity`. Meniu ir naudotojo vietiniai jo pakeitimai į šį pataisymą neįtraukiami. Esami žaidimo prefabai neperrašyti; bendri komponentai konfigūruojami scenose ir paleidžiant žaidimą.
-
-Audituotas abiejų scenų grunto prefab'as – `Assets/Frefabs/Cube.prefab`: jis jau turėjo dinaminį Rigidbody su Continuous Dynamic ir dėžinį koliderį. `DirtBlock` aktyvavimo metu parenka netaisyklingą vizualų tinklą, rutulinį kontaktą ir masę pagal tūrio bei medžiagos tankio sandaugą; prefab'o failas nekeistas.
-
-Skriptų pakeitimų sąrašas (`Assets/Scripts`):
-
-| Sistema | Failai |
+| Komponentas | Reikšmės ir poveikis |
 |---|---|
-| Kontaktai ir judesys | `ExcavatorContacts.cs` (naujas), `ExcavatorBody.cs`, `GroundedAttachment.cs`, `PartDriver.cs`, `Claw.cs` |
-| Kaušas ir gabalai | `BucketInside.cs`, `BucketSoilFill.cs`, `DigTeeth.cs`, `DirtBlock.cs` |
-| Reljefas ir medžiagos | `DigSystem.cs`, `SoilDynamics.cs`, `TerrainSoilCache.cs` (naujas), `SoilMaterialProfile.cs` (naujas) |
-| Apkrova ir atrama | `ExcavatorGrounding.cs`, `ExcavatorHydraulics.cs`, `ExcavatorMass.cs`, `TrackDrive.cs` |
-| Efektai | `SoilWorkFeedback.cs` (naujas), `SandFlow.cs`, `LeverTilt.cs` |
+| `ExcavatorGrounding` | `physicalSuspension=true`; `suspensionCompression=0.018` m, `suspensionDamping=1`, `contactReach=0.06` m. Didesnis slopinimas mažina šokinėjimą. `maxDriveSlope=35`, `maxStepHeight=0.18` m. |
+| `ExcavatorGrounding` | `maximumHydraulicForce=18000` N, `supportForceMargin=1.2`, `toolCompliance=0.025` m, `maxHydraulicTilt=10`°. Didinti jėgą saikingai: ilgesnis petys natūraliai lengviau pakelia mašiną. |
+| `ExcavatorMass` | Bazė 1700 kg, strėlė 170, ranka 100, įrankis 70; `baseCenterOfMassMetres` pateiktas metrais, nepriklauso nuo FBX mastelio. |
+| `DigTeeth` | `depthResistanceMultiplier=0.08`, `maxResistance=4`, `speedResistanceMultiplier=0.12`, `maxDepthPerStep=0.03` m. Bendro pasipriešinimo ribojimas nepanaikina kietų kliūčių patikros. |
+| `SoilMaterialProfile` | `resistance`, `angleOfRepose`, `cohesion`, `friction`, `softness`, `density`; keturi profiliai `Assets/Soil`. Loose dirt slinkimo kampas 34°. |
+| `DigSystem` | `clayDepth=1.5`, `compactedDepth=3.5` m, `maximumWorkDistance=8` m. Spindulys turi apimti visą įrankio pasiekiamumą ir išpylimo vietą. |
+| `GroundedAttachment` | Griebtuvo zoną prieš Play keičia `ExcavatorContacts.softGripperDepth=0.06`; kuriamiems kontaktams `canScrapeSoil=true`; peiliui `canPushSoil=true`. Minkštos zonos nedidinti tiek, kad įrankis laisvai prasmuktų pro gruntą. |
+| `ExcavatorBody` | `dynamicContactSkin=0.018` m, `maxObjectPushSpeed=0.35` m/s, `maxObjectPushForce=1200` N. |
+| `DigSystem`, `SoilWorkFeedback` | 32 laisvi dinaminiai grunto gabalai, 2 šlaitų blokai per ciklą, 2 dažymo blokai, 128 dulkių dalelės. |
 
-Taip pat atnaujinti `ProjectSettings/DynamicsManager.asset`, `Assets/Editor/AdvancedSoilValidation.cs`, `BucketGroundValidation.cs`, `RealisticControlValidation.cs`; pridėtas `Assets/Editor/SoilInteractionValidation.cs`, keturi `Assets/Soil/*.asset` profiliai ir jų `.meta` failai.
+## Play režimo patikra
+
+1. Abiejuose lygiuose lėtai nuleisti peilį, tada spausti toliau. Stebėti iš šono: turi kilti peilio galas, priešingas vikšrų galas likti atramoje. Pakelti peilį ir pakartoti su kaušu. Keisti strėlės petį ir krovinį; nusėdimas neturi šokinėti.
+2. Level 2 lėtai prakišti atidarytą griebtuvą po rąstu prie žemės, užspausti, pakelti, pasukti ir paleisti. Žnyplės gali negiliai gramdyti, rąstas neturi būti išmetamas kontakto impulsu. Patikrinti ir kietą kliūtį: ji neturi tapti pereinama.
+3. Level 1 kasti sluoksniais, reguliariai išpilti krovinį į atskirą vietą ir plėsti duobės kraštus. Naudoti nuleidimą, rankos pritraukimą ir kaušo užlenkimą kartu. Palyginti žemės paviršių su 2 m gylio žymekliu. Vien vertikaliai spaudžiant uždarą dugną žemės neturi patekti į kaušą.
+4. Suformuoti negilią duobę ir 30–35° išvažiavimo rampą. Važiuoti abiem kryptimis, sustoti ant rampos; stebėti vikšrų kontaktus. 90° siena nėra važiavimo rampa.
+5. Peiliu stumti mažą pylimą į negilią duobę: už peilio turi žemėti, priekyje ir pro galus – kauptis, duobė pildytis. Su didesniu pylimu greitis turi mažėti. Palyginti vėžes minkštame ir sutankintame grunte.
+6. Kasti ir pilti, sustoti, padėti rąstą ant pakeisto paviršiaus. Įjungus Physics Debugger kolideris turi sutapti su reljefu. Stebėti, ar toli nuo darbo vietos nekinta nei aukštis, nei ruda tekstūra.
+7. Kabinoje neturi būti jokio talpos teksto; užpildymas matomas tik kauše. Greitai išversti: užpildas mažėja kartu su srautu, žemė lieka nusileidimo vietoje.
+8. Quest 2 build'e matuoti CPU Physics, Terrain, skriptus, GC ir GPU kasant, sukant bei ilgai pilant. 72–90 FPS aparatine įranga dar nepatvirtintas. Jei reikia, pirmiausia mažinti šlaitų / dažymo blokų ir efektų biudžetus, ne grąžinti koliderio delsą.
+
+## Automatinių bandymų vykdymas
+
+Bandymai skirti atskirai projekto kopijai, nes užbaigia Unity procesą. Nenaudoti ant atidaryto pagrindinio projekto.
+
+- `RealisticControlValidation.Run`: ankstesnio valdymo, krovinio, kasimo, peilio, garso, masių ir scenų regresijos.
+- `FollowupPhysicsValidation.Run`: natūralios taškinės jėgos, atrama masteliais 1 ir 0,02, tikras strėlės pasiekiamumas, išvažiavimas 30° rampa, natyvaus reljefo koliderio sutapimas, darbo zonos ir dėmių ribos, minkštas kontaktas su rąstu ir tikras scenos peilis.
+- `FollowupPhysicsValidation.RunScenes`: abiejų tikrų scenų dinaminės atramos nusėdimas, visų kaušo kontaktų priklausymas bendram važiuoklės Rigidbody, kaušo vietos ant strėlės išlaikymas judant važiuoklei ir užblokuoto Level 2 griebtuvo kontakto laiko / paskirstymų matavimas.
+- `FollowupPhysicsValidation.RunDeep`: kartojami tikros Level 1 geometrijos ribotų sąnarių pjovimo ciklai, krovinio iškrovimo ir nusėdimo apskaita. Šiame izoliuotame pjovimo bandyme šlaitų slinkimas išjungtas; slinkimas ir atramos tikrinami atskiruose bandymuose. Tai nepakeičia rankinio VR bandymo.
+
+Scenų pakeitimai skirti Level 1 ir Level 2. Naudotojo meniu ir šablonų pakeitimai į fizikos pataisą neįtraukiami.
+
+Po skriptų atnaujinimo sustabdyti Play ir iš naujo paleisti sceną: nauja kontaktų hierarchija paruošiama Awake, o jau vykstančio Play sugadinta įrankio poza nėra laikoma teisinga pradine scena.
+
+Fizikos regresijų rezultatai atskiroje Unity kopijoje: abi tikros scenos nusėda virš reljefo (mažiausias vikšrų tarpas apie 3–5 mm), kaušas nekeičia savo vietos ant strėlės judant dinaminei važiuoklei. Level 2 grunto kontakto bandyme aktyvus gramdymas su reljefo sinchronizavimu vidutiniškai truko apie 3,4 ms vienam žingsniui ir po apšilimo nekūrė nuolatinių GC paskirstymų. Tai kompiuterio Editor batch matavimas; VR įrenginio FPS jis negarantuoja.
+
+Galutinė kasimo regresija pasiekė 2,032 m gylį per tikrus ribotų Level 1 sąnarių pjovimo ciklus; iškrauta apie 0,535 m³ surinkto grunto. Iškrovimas šiame izoliuotame bandyme atliekamas testiniu krovinių iškėlimo / nusėdimo pagalbininku, o tikras palaipsnis kaušo išpylimas atskirai tikrinamas bendroje regresijų grupėje. Šlaitų slinkimas gylio bandyme išjungtas. `RealisticControlValidation.Run`, `FollowupPhysicsValidation.Run`, `FollowupPhysicsValidation.RunScenes` ir `FollowupPhysicsValidation.RunDeep` galutinėse patikrose praėjo.

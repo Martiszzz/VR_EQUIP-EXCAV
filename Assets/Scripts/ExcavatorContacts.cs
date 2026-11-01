@@ -5,9 +5,14 @@ using UnityEngine;
 public class ExcavatorContacts : MonoBehaviour
 {
     public bool addKinematicBody = true;
+    public bool forceBasedChassis=true;
+    [Range(0,.1f)] public float softGripperDepth=.06f;
+    PhysicsMaterial contactMaterial;
     public void Awake() { Initialize(); }
     public void Initialize()
     {
+        if(!contactMaterial)contactMaterial=new PhysicsMaterial("Excavator zero-bounce contact")
+        {bounciness=0,staticFriction=.8f,dynamicFriction=.65f,bounceCombine=PhysicsMaterialCombine.Minimum,frictionCombine=PhysicsMaterialCombine.Average};
         foreach (var driver in GetComponentsInChildren<PartDriver>(true))
         {
             var part=driver.target;
@@ -37,13 +42,44 @@ public class ExcavatorContacts : MonoBehaviour
                 var contact=jaw.part.GetComponent<GroundedAttachment>();
                 if(!contact)contact=jaw.part.gameObject.AddComponent<GroundedAttachment>();
                 contact.includeChildren=true;contact.canPushSoil=false;
+                contact.aggregateParent=null;
+                contact.canScrapeSoil=true;contact.softSoilDepth=softGripperDepth;
+                foreach(var part in jaw.part.GetComponentsInChildren<GroundedAttachment>())
+                {part.canScrapeSoil=true;part.softSoilDepth=softGripperDepth;if(part!=contact)part.aggregateParent=contact;}
             }
         }
         if(addKinematicBody)
         {
             var body=GetComponent<Rigidbody>();if(!body)body=gameObject.AddComponent<Rigidbody>();Configure(body);
+            var grounding=GetComponent<ExcavatorGrounding>();
+            if(forceBasedChassis && grounding && grounding.physicalSuspension)
+            {
+                // A nested kinematic bucket keeps its own world pose when its dynamic parent moves.
+                // Animated shell/jaw colliders must belong to the same compound body as the chassis.
+                foreach(var child in GetComponentsInChildren<Rigidbody>(true))
+                    if(child!=body && child.isKinematic && !child.GetComponent<DirtBlock>())
+                        DestroyImmediate(child);
+                grounding.EnablePhysicalSupport(body);
+            }
+        }
+        var terrain=GetComponent<ExcavatorGrounding>();var terrainCollider=terrain && terrain.terrain?terrain.terrain.GetComponent<TerrainCollider>():null;
+        foreach(var collider in GetComponentsInChildren<Collider>(true))
+        {
+            if(collider.isTrigger)continue;
+            collider.sharedMaterial=contactMaterial;
+            // Terrain uses suspension/tool forces and deformation, not kinematic depenetration impulses.
+            if(terrainCollider)Physics.IgnoreCollision(collider,terrainCollider,true);
+        }
+        foreach(var body in FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
+        {
+            if(body.transform.IsChildOf(transform) || body.isKinematic)continue;
+            body.maxDepenetrationVelocity=.35f;body.interpolation=RigidbodyInterpolation.Interpolate;
+            body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
+            body.linearDamping=Mathf.Max(body.linearDamping,.35f);body.angularDamping=Mathf.Max(body.angularDamping,.8f);
+            foreach(var collider in body.GetComponentsInChildren<Collider>())collider.sharedMaterial=contactMaterial;
         }
     }
+    void OnDestroy(){if(contactMaterial){if(Application.isPlaying)Destroy(contactMaterial);else DestroyImmediate(contactMaterial);}}
     static void Configure(Rigidbody body)
     {
         body.isKinematic=true;body.useGravity=false;

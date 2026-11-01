@@ -15,7 +15,7 @@ public readonly struct SoilProperties
             case SoilKind.Sand: return new SoilProperties(1500,0.65f,32,0,0.62f,0.9f,0);
             case SoilKind.Clay: return new SoilProperties(1800,2.1f,52,0.035f,0.58f,0.35f,0.75f);
             case SoilKind.Compacted: return new SoilProperties(1950,3.5f,65,0.07f,0.95f,0.06f,0.25f);
-            default: return new SoilProperties(1600,1,40,0.012f,0.82f,0.55f,0.2f);
+            default: return new SoilProperties(1600,1,34,0.012f,0.82f,0.55f,0.2f);
         }
     }
 }
