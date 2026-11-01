@@ -28,6 +28,7 @@ public class TrackDrive : MonoBehaviour
     public float LeftSlip {get;private set;}
     public float RightSlip {get;private set;}
     public float RequestedFlow => !Ignition.EngineRunning || !leftLever || !rightLever ? 0 : (Mathf.Abs(leftLever.Forward)+Mathf.Abs(rightLever.Forward))*0.5f;
+    public bool HasMotion => (leftLever && Mathf.Abs(Input(leftLever.Forward))>.001f) || (rightLever && Mathf.Abs(Input(rightLever.Forward))>.001f) || Mathf.Abs(leftCmd)>.01f || Mathf.Abs(rightCmd)>.01f || Mathf.Abs(velocity)>.01f || Mathf.Abs(yawVelocity)>.1f;
     float Traction(Vector3 point,float command,float dt)
     {
         var s=DigSystem.I;

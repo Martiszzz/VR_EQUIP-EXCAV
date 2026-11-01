@@ -100,3 +100,11 @@ Pakeitimai peržiūrėti pagal kodą; Unity ir automatiniai bandymai nepaleisti.
 - Paimtas rąstas tiksliai seka išsaugotą vietinę laikymo pozą. Jo laikinos kolizijos su pačia mašina išjungiamos, kad kinematinis rąstas nestumdytų dinaminės važiuoklės; paleidus atkuriamos ankstesnės porų kolizijos, interpoliacija ir CCD režimas.
 
 Po modelio importo Play paleisti iš naujo. Rankiniu būdu patikrinti abiejų lygių kabinos sukimą su nuleistu peiliu ir skirtingo storio rąstų suėmimą antrame lygyje.
+
+## Kabinos sukimas pakėlus peilį
+
+Peržiūrėta pagal logiką; Unity ir automatiniai bandymai nepaleisti. Ramybės būsena dabar galima ir stovint vien ant vikšrų. Tuomet masės centro projekcija tikrinama tik pagal tikrus vikšrų atramos taškus, nepridedant įrankio. Kabinos sukimasis nepažadina stabilios važiuoklės vien todėl, kad nėra nuleisto peilio.
+
+Pridėtas `ExcavatorSupportFinalizer`, paleidimo metu prijungiamas prie dinaminės važiuoklės. Jo FixedUpdate vykdomas po kabinos / rankos judesių ir reljefo sinchronizavimo: jeigu geometrija bei atrama vis dar galioja, jis iš naujo patvirtina ramybės būseną prieš native fizikos gravitaciją. Taip koliderių judesys po ankstesnio atramos skaičiavimo neturi palikti vieno neparemto gravitacijos žingsnio.
+
+`TrackDrive.HasMotion` tikrina komandas po negyvosios zonos bei tikrą likusią vikšrų eigą, todėl stovėjimo režimas neįjungiamas riedant ar sukant vikšrus. Važiavimas, strėlės judesiai, grunto / krovinio pokyčiai ir masės centro išėjimas už atramos ploto toliau nutraukia ramybės būseną. Po naujo Play paleidimo rankiniu būdu patikrinti abiejų lygių kabinos sukimą kairiuoju joysticku su pakeltu peiliu bei kaušu / griebtuvu virš žemės.
