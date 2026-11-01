@@ -5798,7 +5798,6 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 893401100002}
   - {fileID: 3157918958855767196}
   - {fileID: 8295262346387750342}
   - {fileID: 3149399323993271818}
@@ -7662,66 +7661,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8267420326339598160}
   m_Mesh: {fileID: 2649645417297548129, guid: ea6e757fa7e3b98439011e55b0a7b144, type: 3}
---- !u!1 &893401100001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 893401100002}
-  - component: {fileID: 893401100003}
-  m_Layer: 0
-  m_Name: Cab Radio
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &893401100002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 893401100001}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0.7071068, z: 0, w: 0}
-  m_LocalPosition: {x: 0.02, y: 0.19249, z: 0.36625}
-  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
-  m_ConstrainProportionsScale: 1
-  m_Children: []
-  m_Father: {fileID: 5345148430944160316}
-  m_LocalEulerAnglesHint: {x: 180, y: 0, z: 90}
---- !u!114 &893401100003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 893401100001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0918b5dd67b141cfa7c37a3bbf947d91, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ExcavatorRadio
-  stations:
-  - name: Worksite FM
-    frequency: 88.4
-    clip: {fileID: 8300000, guid: ea002c418c894e6c93e529955581991a, type: 3}
-  - name: Cabin Chill
-    frequency: 94.6
-    clip: {fileID: 8300000, guid: be2a8d0198184834a4caf4f5663a25f6, type: 3}
-  - name: Night Shift
-    frequency: 103.2
-    clip: {fileID: 8300000, guid: 307dcd44b9584de09d6b373eb1db5bad, type: 3}
-  displayFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  screenMaterial: {fileID: 2100000, guid: 85b6c864c3754b91a53efa8512aa5c69, type: 2}
-  requiresEngine: 0
-  powerOn: 0
-  volume: 0.35
-  stationIndex: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
