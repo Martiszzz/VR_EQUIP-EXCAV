@@ -5,6 +5,9 @@ using UnityEngine;
 public partial class DigSystem : MonoBehaviour
 {
     public static DigSystem I;
+    // Raised whenever soil is placed onto the terrain, with the world point and
+    // the volume (m³) actually accepted. Lets level trackers detect delivered soil.
+    public static event System.Action<Vector3, float> SoilPlaced;
     public Terrain terrain;
     public DirtBlock blockPrefab;
     public BucketInside bucket;
@@ -227,7 +230,7 @@ public partial class DigSystem : MonoBehaviour
     float CellArea => terrain.terrainData.heightmapScale.x * terrain.terrainData.heightmapScale.z;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatic() { I = null; }
+    static void ResetStatic() { I = null; SoilPlaced = null; }
     void Awake()
     {
         if (!terrain || !terrain.terrainData)
@@ -434,7 +437,9 @@ public partial class DigSystem : MonoBehaviour
             }
             Disturb(point,radius); PaintDumped(point, radius * 1.3f, 0.5f);
         }
-        return Mathf.Min(volume, accepted * td.size.y * CellArea);
+        float placed = Mathf.Min(volume, accepted * td.size.y * CellArea);
+        if (placed > 0f) SoilPlaced?.Invoke(point, placed);
+        return placed;
     }
     public DirtBlock Spawn(Vector3 pos, float? volume = null, int fractureLevel = 0, SoilKind kind = SoilKind.Loam)
     {
