@@ -87,8 +87,8 @@ public class ExcavatorEngineAudio : MonoBehaviour
             loopSource.pitch = Mathf.MoveTowards(loopSource.pitch, 0.65f, dt * 0.6f);
             State = startupGain > 0 || loopGain > 0 ? Phase.Stopping : Phase.Off;
         }
-        startupSource.volume = fullVolume * startupGain;
-        loopSource.volume = Mathf.Clamp01(Mathf.Lerp(idleVolume, fullVolume, Rpm) * loopGain * Mathf.Lerp(1,1.15f,hydraulicLoad));
+        startupSource.volume = fullVolume * startupGain * RadioChannel.EngineDuck;
+        loopSource.volume = Mathf.Clamp01(Mathf.Lerp(idleVolume, fullVolume, Rpm) * loopGain * Mathf.Lerp(1, 1.15f, hydraulicLoad)) * RadioChannel.EngineDuck;
         if (startupGain == 0) startupSource.Stop();
         if (State == Phase.Off) { loopSource.Stop(); loopStarted = false; }
     }
