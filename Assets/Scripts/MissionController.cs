@@ -172,9 +172,9 @@ public class MissionController : MonoBehaviour
     {
         var channel = RadioChannel.I;
         if (!channel || stages == null || stage < 0 || stage >= stages.Length) return;
-        if (!force && (RadioChannel.IsTalking || Time.time - lastReact < minGap)) return;
         var r = Find(stages[stage].reactions, key) ?? Find(universal, key);
         if (r == null || !r.Ready) return;
+        if (!force && !r.once && (RadioChannel.IsTalking || Time.time - lastReact < minGap)) return;
         channel.Say(r.Pick());
         lastReact = Time.time;
     }

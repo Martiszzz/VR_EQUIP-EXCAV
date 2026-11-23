@@ -34728,7 +34728,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9ad28722448bb1f42a1101c978338fdd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DemolitionTracker
-  completionPercent: 0.25
+  completionPercent: 0.2
   loadNextSceneOnComplete: 0
   nextSceneName: Menu
   hudCanvas: {fileID: 375897389}
@@ -41187,11 +41187,6 @@ MonoBehaviour:
       - clip: {fileID: 8300000, guid: 6dd68a2680c28cf4e9981d403ca9254e, type: 3}
         subtitle: 
         delayBefore: 0
-    - atProgress: 0.85
-      lines:
-      - clip: {fileID: 8300000, guid: c0237d086971ada47978995f30254045, type: 3}
-        subtitle: 
-        delayBefore: 0
     reactions:
     - key: slow
       variants:
@@ -42614,7 +42609,7 @@ MonoBehaviour:
   root: {fileID: 0}
   moveThreshold: 0.6
   tiltThreshold: 40
-  requiredFraction: 0.85
+  requiredFraction: 0.2
 --- !u!1 &2037831995
 GameObject:
   m_ObjectHideFlags: 0

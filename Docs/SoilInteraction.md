@@ -40,6 +40,8 @@ Važiavimo X/Z ir kabinos posūkio komandos tebėra valdomos saugomais pozos ži
 7. Kabinoje neturi būti jokio talpos teksto; užpildymas matomas tik kauše. Greitai išversti: užpildas mažėja kartu su srautu, žemė lieka nusileidimo vietoje.
 8. Quest 2 build'e matuoti CPU Physics, Terrain, skriptus, GC ir GPU kasant, sukant bei ilgai pilant. 72–90 FPS aparatine įranga dar nepatvirtintas. Jei reikia, pirmiausia mažinti šlaitų / dažymo blokų ir efektų biudžetus, ne grąžinti koliderio delsą.
 
+Misijų progresas: Level 0 pastato tikslas baigiasi ties 20 % sugriautų dalių; tarpinis radijo pranešimas groja ties 10 %. Level 1 duobės tikslas skaičiuoja pašalintą grunto tūrį savo zonoje, baigiasi ties 0,5 m³, o tarpinis pranešimas groja ties 0,25 m³. Pasiekus tikslą ekskavatoriaus kasimas nesustabdomas. `DigTracker` atskirai seka į paskirtą zoną pristatytą, o ne iškastą gruntą.
+
 ## Automatinių bandymų vykdymas
 
 Bandymai skirti atskirai projekto kopijai, nes užbaigia Unity procesą. Nenaudoti ant atidaryto pagrindinio projekto.
@@ -112,3 +114,4 @@ Pridėtas `ExcavatorSupportFinalizer`, paleidimo metu prijungiamas prie dinamin�
 ## Antro lygio atvalo nustatymų sulyginimas
 
 Abiejų scenų atvalo modelio transformacija, apatinis BoxCollider, PartDriver X ašis, ±30° ribos, 22°/s greitis, pagreitis, stabdymas ir vienos ašies 10° svirtis sutampa. Antrame lygyje aiškiai serializuoti tie patys važiuoklės ir hidraulinės atramos parametrai kaip pirmame, taip pat svirties haptikos nustatymai; bendrus pataisymus toliau taiko tie patys skriptai. Rasta ir pataisyta antrame lygyje trūkusi TrackDrive.throttle nuoroda į jo paties gazo rankeną, kad važiavimas atsižvelgtų į gazo padėtį kaip pirmame lygyje. Skirtingų kaušo / griebtuvo nuorodos išlaikytos. Peržiūrėtas kodas bei scenų tekstiniai nustatymai, Unity ir automatiniai bandymai nepaleisti.
+

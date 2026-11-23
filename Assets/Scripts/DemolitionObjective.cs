@@ -6,7 +6,7 @@ public class DemolitionObjective : Objective
     public Transform root;                           // namo tėvinis objektas (jei null – šis objektas)
     [Min(0.05f)] public float moveThreshold = 0.6f;  // m
     [Range(5f, 90f)] public float tiltThreshold = 40f;
-    [Range(0.1f, 1f)] public float requiredFraction = 0.85f;
+    [Range(0.01f, 1f)] public float requiredFraction = 0.2f;
 
     Rigidbody[] pieces;
     Vector3[] startPos;

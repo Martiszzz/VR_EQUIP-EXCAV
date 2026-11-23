@@ -4,9 +4,8 @@ public class DigPitObjective : Objective
 {
     public Transform zone;                                   // duobės centras (Y ašis į viršų, rotacija svarbi)
     public Vector2 size = new Vector2(3f, 2f);               // X = ilgis, Z = plotis
+    [Min(0.01f)] public float targetVolume = 0.5f;            // m³
     [Min(0.1f)] public float targetDepth = 1.5f;
-    [Range(0.5f, 1f)] public float depthTolerance = 0.85f;  // kiek tikslinio gylio laikoma pasiekta
-    [Range(0.5f, 1f)] public float coverageRequired = 0.85f; // kokia ploto dalis turi pasiekti gylį
     [Min(1f)] public float tooDeepFactor = 1.35f;
     [Min(0.1f)] public float wideMargin = 0.5f;              // kiek už zonos jau laikoma "per plati"
     [Min(0.2f)] public float band = 1.2f;                    // aplink zoną stebimas ruožas
@@ -14,7 +13,10 @@ public class DigPitObjective : Objective
 
     Terrain terrain;
     float[] baseline;
+    float[] volumeBaseline;
     int nx, nz;
+    int volumeNx, volumeNz;
+    float volumeStepX, volumeStepZ;
     float progress, clock;
     bool began, complete, startedRaised;
     DigTeeth[] teeth;
@@ -34,6 +36,18 @@ public class DigPitObjective : Objective
         for (int iz = 0; iz < nz; iz++)
             for (int ix = 0; ix < nx; ix++)
                 baseline[iz * nx + ix] = Surface(Point(-ox + ix * cell, -oz + iz * cell));
+        volumeNx = Mathf.Max(1, Mathf.CeilToInt(size.x / cell));
+        volumeNz = Mathf.Max(1, Mathf.CeilToInt(size.y / cell));
+        volumeStepX = size.x / volumeNx;
+        volumeStepZ = size.y / volumeNz;
+        volumeBaseline = new float[volumeNx * volumeNz];
+        for (int iz = 0; iz < volumeNz; iz++)
+            for (int ix = 0; ix < volumeNx; ix++)
+            {
+                float lx = -size.x * 0.5f + (ix + 0.5f) * volumeStepX;
+                float lz = -size.y * 0.5f + (iz + 0.5f) * volumeStepZ;
+                volumeBaseline[iz * volumeNx + ix] = Surface(Point(lx, lz));
+            }
         teeth = FindObjectsByType<DigTeeth>(FindObjectsSortMode.None);
         began = true;
     }
@@ -53,8 +67,7 @@ public class DigPitObjective : Objective
     void Evaluate()
     {
         float hx = size.x * 0.5f, hz = size.y * 0.5f, ox = hx + band, oz = hz + band;
-        int inside = 0, enough = 0, deep = 0, wide = 0;
-        float sum = 0;
+        int inside = 0, deep = 0, wide = 0;
         for (int iz = 0; iz < nz; iz++)
             for (int ix = 0; ix < nx; ix++)
             {
@@ -64,20 +77,27 @@ public class DigPitObjective : Objective
                 if (ax <= hx && az <= hz)
                 {
                     inside++;
-                    sum += Mathf.Clamp01(depth / targetDepth);
-                    if (depth >= targetDepth * depthTolerance) enough++;
                     if (depth > targetDepth * tooDeepFactor) deep++;
                 }
                 else if ((ax > hx + wideMargin || az > hz + wideMargin) && depth > targetDepth * 0.35f) wide++;
             }
         if (inside == 0) return;
-        float mean = sum / inside;
-        progress = Mathf.Min(0.99f, mean);
-        if (!startedRaised && mean > 0.08f) { startedRaised = true; Raise("started"); }
+        float excavatedVolume = 0f;
+        for (int iz = 0; iz < volumeNz; iz++)
+            for (int ix = 0; ix < volumeNx; ix++)
+            {
+                float lx = -hx + (ix + 0.5f) * volumeStepX;
+                float lz = -hz + (iz + 0.5f) * volumeStepZ;
+                float depth = Mathf.Max(0f, volumeBaseline[iz * volumeNx + ix] - Surface(Point(lx, lz)));
+                excavatedVolume += depth * volumeStepX * volumeStepZ;
+            }
+        float goalVolume = Mathf.Max(0.01f, targetVolume);
+        progress = Mathf.Clamp01(excavatedVolume / goalVolume);
+        if (!startedRaised && progress > 0.08f) { startedRaised = true; Raise("started"); }
         if (deep > inside * 0.05f) Raise("tooDeep");
         if (wide > 6) Raise("tooWide");
         CheckWrongPlace();
-        if (enough >= inside * coverageRequired) complete = true;
+        if (excavatedVolume >= goalVolume) complete = true;
     }
 
     void CheckWrongPlace()

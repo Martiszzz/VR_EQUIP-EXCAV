@@ -3443,7 +3443,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5427a33501dba984588b5adcb70f28f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OperatorActivity
-  levers: []
+  levers:
+  - {fileID: 7119197045842624717}
+  - {fileID: 7474370918123358344}
+  - {fileID: 7611461237230684708}
+  - {fileID: 7731109980590164691}
+  - {fileID: 9107482286238615050}
   threshold: 0.2
 --- !u!4 &791455033
 Transform:
@@ -3487,7 +3492,7 @@ MonoBehaviour:
       subtitle: 
       delayBefore: 0
     beats:
-    - atProgress: 0.85
+    - atProgress: 0.5
       lines:
       - clip: {fileID: 8300000, guid: 42d0f628a776c164f90e1a5812c1c559, type: 3}
         subtitle: 
@@ -5920,9 +5925,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DigPitObjective
   zone: {fileID: 1226312561}
   size: {x: 3, y: 2}
+  targetVolume: 0.5
   targetDepth: 1.5
-  depthTolerance: 0.85
-  coverageRequired: 0.85
   tooDeepFactor: 1.35
   wideMargin: 0.5
   band: 1.2
