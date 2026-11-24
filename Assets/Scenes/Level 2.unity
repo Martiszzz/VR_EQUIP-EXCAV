@@ -6298,7 +6298,7 @@ MonoBehaviour:
   localAxis: {x: 1, y: 0, z: 0}
   speed: 22
   limit: 1
-  minAngle: -20
+  minAngle: -30
   maxAngle: 60
   deadzone: 0.12
   acceleration: 45
@@ -6466,11 +6466,11 @@ MonoBehaviour:
   grabMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  gripConfirmTime: 0.08
-  gripContactSkin: 0.002
+  gripConfirmTime: 0.05
+  gripContactSkin: 0.02
   closeSpeed: 0.8
   deadzone: 0.12
-  penetrationTolerance: 0.001
+  penetrationTolerance: 0.003
   maxAngleStep: 0.5
   maxPushPerStep: 0.03
   maxObjectPushSpeed: 0.3
@@ -8731,7 +8731,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1719961486234352517}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0.00508508, y: 0.02031079, z: -0.000024857929, w: 0.9997808}
   m_LocalPosition: {x: 0.00006885528, y: -0.003952535, z: -0.008310728}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -8745,7 +8745,7 @@ Transform:
   - {fileID: 1639771801}
   - {fileID: 410177498}
   m_Father: {fileID: 7653649128550395807}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0.583, y: 2.328, z: 0.009}
 --- !u!1 &3770914708158798733
 GameObject:
   m_ObjectHideFlags: 0
@@ -11368,14 +11368,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2280244782431692531}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: -0.052828334, y: -0, z: -0, w: 0.99860364}
   m_LocalPosition: {x: 0, y: -0.1176985, z: -0.09134424}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 993030068}
   m_Father: {fileID: 1125628318371602787}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -6.057, y: 0, z: 0}
 --- !u!1 &8492568004761795126
 GameObject:
   m_ObjectHideFlags: 0
